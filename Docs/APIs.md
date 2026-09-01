@@ -110,10 +110,16 @@ Special payloads:
 ```
 POST /documents             multipart: file, case_id, kind      → {id, sha256, duplicate_of?, extraction_status:"pending"}
 GET  /documents/{id}        → metadata + extraction
+GET  /cases/{id}/documents  → the case's documents (metadata list)
 GET  /documents/{id}/file   → signed URL (short-lived)
 POST /documents/{id}/extract            → 202 {job_id}   (worker)
-GET  /documents/{id}/extraction         → {status, fields, confidence, source_spans, proposed_event}
+GET  /documents/{id}/extraction         → {status, fields, confidence, source_spans, proposed_event,
+                                           warnings[], engine, pages, document_id}
 POST /documents/{id}/extraction/reject  {reason}
+```
+Committing an event that carries a `document_id` flips that document's `extraction_status`
+from `proposed` to `confirmed` (rules.md C4).
+```
 ```
 
 ### 3.6 Parcels
