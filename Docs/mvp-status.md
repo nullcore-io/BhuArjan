@@ -35,8 +35,8 @@ commit).
 | Un-lapse / reinstatement flow | Partial | `EVENT_REVERSED` is appendable everywhere (audit-visible correction marker) but does not itself restore a stage; a wrongly-lapsed case needs a rebuild story. |
 | R&R module (families, Second Schedule heads) | Not built | MVP column says "—" (final-product.md §5F). Tables exist; `families_affected` KPI reads 0. |
 | Hindi i18n on case screens | Wiring only | Login/public/dashboard carry bilingual labels; case page + wizard are English. i18next is set up. |
-| UI role gating | API-only | Extend/record buttons show for all roles; the API enforces (404/422). Thread roles from /auth/me. |
-| Top-risk table badge | Cosmetic | Shows "On time" for a running clock at 87%; needs elapsed from API. |
+| UI role gating | Done (core) | Record = LAO/Collector/State; Extend = Collector/State; no-document path = Collector-level, enforced server-side too (rules.md C1). Finer per-screen gating remains. |
+| Top-risk table badge | Done | API now sends `level`/`elapsed_pct`; badge shows amber/red honestly. |
 | Reports (POST /reports), district choropleth, admin users/overlay-upload, webhooks | Not built | APIs.md documents the contract. |
 | KML/zipped-SHP parcel import | 422 with message | GeoJSON path works. |
 | OCR for scanned PDFs | Not enabled | Text-layer PDFs extract; scanned → `ocr=true` warning, no proposal. |

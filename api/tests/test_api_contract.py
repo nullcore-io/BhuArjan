@@ -396,3 +396,23 @@ def test_rebuild_replays_the_ledger_into_the_projection(db, world, client, auth,
     assert rebuilt["stage"] == "NOTIFIED"
     assert rebuilt["area_notified_ha"] == 12.5
     assert stage_of(db, case) == "NOTIFIED"
+
+
+def test_the_no_document_path_is_collector_level(db, world, client, auth, record):
+    """rules.md C1: an explicit no-document reason is recorded by a Collector-level
+    role; an LAO posting one gets document_required, not a committed event."""
+    from datetime import date
+
+    case = world.case(db, "NH_ACT_1956")
+    status, body = record(
+        case, "NOTIFICATION_3A", date(2025, 1, 1), {},
+        user=world.lao, no_document_reason="LAO trying the collector-only path",
+    )
+    assert status == 422
+    assert body["type"] == "document_required"
+    # The same append by the Collector commits.
+    status2, body2 = record(
+        case, "NOTIFICATION_3A", date(2025, 1, 1), {},
+        user=world.collector, no_document_reason="entry made on the Collector's order",
+    )
+    assert status2 == 201, body2

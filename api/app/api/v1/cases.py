@@ -412,6 +412,16 @@ def append_case_event(
 
     payload = dict(body.payload or {})
     if body.no_document_reason:
+        # Recording a statutory event without its document is a Collector-level act
+        # (Docs/rules.md C1); an LAO must upload the paper.
+        if not user.has_role("COLLECTOR", "STATE_REVENUE", "ADMIN"):
+            raise Problem(
+                "document_required",
+                "Document required",
+                422,
+                "Only a Collector-level role may record a statutory event without "
+                "its document; upload the document instead",
+            )
         # Docs/APIs.md §3.4 puts it beside the payload on the wire; the ledger keeps
         # it inside the payload so it is inside the hash chain.
         payload["no_document_reason"] = body.no_document_reason

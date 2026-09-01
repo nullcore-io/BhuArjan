@@ -99,10 +99,11 @@ export function StageBadge({ stage }: { stage?: string | null }) {
 
 /* ------------------------------------------------------------ alert / clock */
 
-export type AlertLevel = 'amber' | 'red' | 'breached' | 'lapsed' | 'closed' | 'suspended' | 'running'
+export type AlertLevel = 'ok' | 'amber' | 'red' | 'breached' | 'lapsed' | 'closed' | 'suspended' | 'running'
 
 const LEVEL_VIEW: Record<AlertLevel, { label: string; tone: Tone }> = {
   running: { label: 'On time', tone: 'ok' },
+  ok: { label: 'On time', tone: 'ok' },
   amber: { label: 'Amber — 75% elapsed', tone: 'amber' },
   red: { label: 'Red — 90% elapsed', tone: 'red' },
   breached: { label: 'Breached', tone: 'black' },

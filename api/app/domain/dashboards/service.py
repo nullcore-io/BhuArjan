@@ -319,6 +319,23 @@ def top_risk_cases(
     out = []
     for clock, case, project in rows:
         days_left = (clock.due_date - today).days if clock.due_date else None
+        elapsed_pct = None
+        if clock.start_date and clock.due_date and clock.due_date > clock.start_date:
+            elapsed_pct = round(
+                100.0 * (today - clock.start_date).days
+                / (clock.due_date - clock.start_date).days,
+                2,
+            )
+        # Same thresholds the rule-sets use (rules.md C2) so this badge can never
+        # disagree with the case page's clock card.
+        if clock.status in ("breached", "lapsed"):
+            level = clock.status
+        elif elapsed_pct is not None and elapsed_pct >= 90:
+            level = "red"
+        elif elapsed_pct is not None and elapsed_pct >= 75:
+            level = "amber"
+        else:
+            level = "ok"
         out.append({
             "case_id": str(case.id),
             "case_no": case.case_no,
@@ -328,6 +345,8 @@ def top_risk_cases(
             "basis": clock.basis,
             "consequence": clock.consequence,
             "status": clock.status,
+            "level": level,
+            "elapsed_pct": elapsed_pct,
             "due_date": clock.due_date.isoformat() if clock.due_date else None,
             "days_left": days_left,
         })

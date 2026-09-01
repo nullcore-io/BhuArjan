@@ -83,12 +83,14 @@ def test_3d_not_issued_within_a_year_rescinds_the_3a_notification(
     assert stage_of(db, case) == "LAPSED"
     assert "NOTIFICATION_RESCINDED" in event_types(client, case, headers)
 
-    # Nothing may be recorded on a lapsed case.
+    # Nothing may be recorded on a lapsed case. (Collector: the no-document path
+    # is Collector-level, and this test is about the stage check behind it.)
+    collector_headers = auth(world.collector, date(2026, 9, 28))
     res = client.post(
         f"/api/v1/cases/{case.id}/events",
         json={"type": "DECLARATION_3D", "occurred_at": "2026-09-29",
               "payload": {}, "no_document_reason": "late"},
-        headers={**headers, "Idempotency-Key": str(uuid.uuid4())},
+        headers={**collector_headers, "Idempotency-Key": str(uuid.uuid4())},
     )
     assert res.status_code == 422
     assert res.json()["ruleset_ref"] == "NH_ACT_1956@2026.09/transitions/DECLARATION_3D"

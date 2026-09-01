@@ -232,6 +232,11 @@ def record(client, auth, world):
         idempotency_key: str | None = None,
         if_match: int | None = None,
     ) -> tuple[int, dict]:
+        # Recording without a document is Collector-level (rules.md C1), and the
+        # harness default attaches no document — so the default actor is the
+        # Collector. Role-specific tests pass `user=` explicitly.
+        if user is None and not document_id and no_document_reason:
+            user = world.collector
         headers = dict(auth(user, on if on is not None else occurred_at))
         headers["Idempotency-Key"] = idempotency_key or str(uuid.uuid4())
         if if_match is not None:

@@ -78,6 +78,8 @@ export default function RecordEvent() {
   const [doc, setDoc] = useState<UploadedDoc | null>(null)
   const [file, setFile] = useState<File | null>(null)
   const [noDocReason, setNoDocReason] = useState('')
+  const meQ = useQuery<{ roles?: string[] }>({ queryKey: ['me'], queryFn: () => api('/auth/me') })
+  const canNoDoc = ['COLLECTOR', 'STATE_REVENUE'].some((r) => (meQ.data?.roles ?? []).includes(r))
   const [fields, setFields] = useState<Record<string, unknown>>({})
   const [baseline, setBaseline] = useState<Record<string, unknown>>({})
   const [touched, setTouched] = useState<Set<string>>(new Set())
@@ -332,6 +334,7 @@ export default function RecordEvent() {
           pollsSpent={pollsSpent}
           noDocReason={noDocReason}
           setNoDocReason={setNoDocReason}
+          canNoDoc={canNoDoc}
           onBack={() => goStep(1)}
           onNext={() => goStep(3)}
           canNext={canLeaveStep2}
@@ -545,6 +548,7 @@ function StepUpload({
   pollsSpent,
   noDocReason,
   setNoDocReason,
+  canNoDoc,
   onBack,
   onNext,
   canNext,
@@ -562,6 +566,7 @@ function StepUpload({
   pollsSpent: boolean
   noDocReason: string
   setNoDocReason: (s: string) => void
+  canNoDoc: boolean
   onBack: () => void
   onNext: () => void
   canNext: boolean
@@ -679,7 +684,7 @@ function StepUpload({
                 placeholder="e.g. gazette copy awaited; entry made on the Collector's order"
                 value={noDocReason}
                 onChange={(e) => setNoDocReason(e.target.value)}
-                disabled={!!doc}
+                disabled={!!doc || !canNoDoc}
               />
             </label>
             <p className="mt-1 text-[11px] text-muted">

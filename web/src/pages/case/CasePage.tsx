@@ -13,6 +13,7 @@
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { api } from '../../lib/api'
 import AlertsTab from '../../components/case/AlertsTab'
 import ClockCard, { ExtendClockModal } from '../../components/case/ClockCard'
 import CompensationTab from '../../components/case/CompensationTab'
@@ -55,6 +56,12 @@ export default function CasePage() {
   const [extending, setExtending] = useState<Clock | null>(null)
 
   const caseQ = useQuery({ queryKey: ['case', id], queryFn: () => fetchCase(id), enabled: !!id })
+  // Role gating per Docs/Frontend.md §2 — the API is the real enforcement point;
+  // the UI just does not offer what the server would refuse.
+  const meQ = useQuery<{ roles?: string[] }>({ queryKey: ['me'], queryFn: () => api('/auth/me') })
+  const roles = meQ.data?.roles ?? []
+  const canRecord = ['LAO', 'COLLECTOR', 'STATE_REVENUE'].some((r) => roles.includes(r))
+  const canExtend = ['COLLECTOR', 'STATE_REVENUE'].some((r) => roles.includes(r))
   const clocksQ = useQuery({
     queryKey: ['case', id, 'clocks'],
     queryFn: () => fetchClocks(id),
@@ -193,9 +200,11 @@ export default function CasePage() {
                 {risk == null ? '—' : Number(risk).toFixed(0)}
               </p>
             </div>
-            <Link to={`/cases/${id}/record`} className="btn-primary">
-              Record event
-            </Link>
+            {canRecord ? (
+              <Link to={`/cases/${id}/record`} className="btn-primary">
+                Record event
+              </Link>
+            ) : null}
           </div>
         </div>
         {riskQ.data?.drivers?.length ? (
@@ -236,7 +245,7 @@ export default function CasePage() {
             ) : (
               <ul className="mt-2 space-y-2">
                 {sortedClocks.map((c) => (
-                  <ClockCard key={c.clock_id} clock={c} onExtend={setExtending} />
+                  <ClockCard key={c.clock_id} clock={c} onExtend={canExtend ? setExtending : undefined} />
                 ))}
               </ul>
             )}
