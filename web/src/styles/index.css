@@ -1,0 +1,33 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-surface text-ink font-sans text-sm;
+}
+
+.card {
+  @apply bg-bg border border-border rounded p-4;
+}
+
+.btn {
+  @apply inline-flex items-center gap-1 rounded border border-border bg-bg px-3 py-1.5 text-sm font-medium hover:bg-surface disabled:opacity-50 disabled:cursor-not-allowed;
+}
+
+.btn-primary {
+  @apply btn bg-accent text-white border-accent hover:bg-[#173c78];
+}
+
+.badge {
+  @apply inline-block rounded px-2 py-0.5 text-xs font-semibold;
+}
+
+table.gov {
+  @apply w-full border-collapse text-sm;
+}
+table.gov th {
+  @apply border-b border-border bg-surface px-2 py-1.5 text-left font-semibold text-muted;
+}
+table.gov td {
+  @apply border-b border-border px-2 h-9;
+}

@@ -1,0 +1,98 @@
+# RFCTLARR Act 2013 — primary track. Sections per Docs/rules.md Part B (domain owner verifies against bare Act).
+track: RFCTLARR_2013
+version: "2026.09"
+stages:
+  PROPOSED:        { on: [SIA_NOTIFIED, SIA_EXEMPTED_S40] }
+  SIA:             { on: [SIA_PUBLIC_HEARING, SIA_REPORT_PUBLISHED, EXPERT_GROUP_APPRAISAL, GOVT_DECISION_S8] }
+  APPRAISED:       { on: [PRELIM_NOTIFICATION_S11] }
+  NOTIFIED:        { on: [SURVEY_COMPLETED_S12, OBJECTION_RECEIVED, OBJECTIONS_DISPOSED,
+                          RR_SCHEME_DRAFTED_S16, RR_SCHEME_APPROVED_S17, RR_SCHEME_PUBLISHED_S18,
+                          COST_DEPOSITED_S19_2, DECLARATION_S19, EXTENSION_GRANTED, NOTIFICATION_RESCINDED,
+                          PARCEL_ADDED, FAMILY_ENUMERATED, COURT_STAY, STAY_VACATED] }
+  DECLARED:        { on: [NOTICE_S21, CLAIMS_RECEIVED, AWARD_S23, EXTENSION_GRANTED, CASE_LAPSED,
+                          PARCEL_ADDED, FAMILY_ENUMERATED, COURT_STAY, STAY_VACATED] }
+  AWARDED:         { on: [RR_AWARD_S31, COMPENSATION_ASSESSED, PAYMENT_MADE, COMPENSATION_PAID_FULL,
+                          POSSESSION_TAKEN_S38, URGENCY_S40_INVOKED, REFERENCE_FILED_S64,
+                          COURT_STAY, STAY_VACATED, EXTENSION_GRANTED] }
+  POSSESSED:       { on: [RR_ENTITLEMENT_DELIVERED, LAND_UTILISED, LAND_RETURNED_S101, CASE_CLOSED] }
+  LAPSED:          { on: [] }
+  CLOSED:          { on: [] }
+
+transitions:
+  SIA_NOTIFIED:             { from: PROPOSED, to: SIA, section: "s.4(1)" }
+  SIA_EXEMPTED_S40:         { from: PROPOSED, to: APPRAISED, section: "s.40" }
+  EXPERT_GROUP_APPRAISAL:   { from: SIA, to: APPRAISED, section: "s.7" }
+  PRELIM_NOTIFICATION_S11:  { from: APPRAISED, to: NOTIFIED, section: "s.11" }
+  DECLARATION_S19:
+    from: NOTIFIED
+    to: DECLARED
+    section: "s.19"
+    requires: [RR_SCHEME_PUBLISHED_S18, COST_DEPOSITED_S19_2]
+  AWARD_S23:                { from: DECLARED, to: AWARDED, section: "s.23" }
+  POSSESSION_TAKEN_S38:
+    from: AWARDED
+    to: POSSESSED
+    section: "s.38"
+    guard: possession_payment_gate     # comp_paid >= comp_assessed, or URGENCY_S40_INVOKED and >= 80%
+  CASE_LAPSED:              { from: [NOTIFIED, DECLARED], to: LAPSED, section: "s.25 / s.19(7)" }
+  NOTIFICATION_RESCINDED:   { from: NOTIFIED, to: LAPSED, section: "s.19(7)" }
+  CASE_CLOSED:              { from: POSSESSED, to: CLOSED }
+
+clocks:
+  - id: S11_AFTER_APPRAISAL
+    starts_on: EXPERT_GROUP_APPRAISAL
+    ends_on: PRELIM_NOTIFICATION_S11
+    duration: { months: 12 }
+    basis: "s.14"
+    consequence: "SIA report lapses; fresh SIA required"
+    on_breach: { mark: breached }        # s.14 requires a fresh SIA; no automatic case lapse
+  - id: OBJECTION_WINDOW
+    starts_on: PRELIM_NOTIFICATION_S11
+    duration: { days: 60 }
+    basis: "s.15(1)"
+    kind: window
+  - id: DECLARATION_S19
+    starts_on: PRELIM_NOTIFICATION_S11
+    ends_on: DECLARATION_S19
+    duration: { months: 12 }
+    basis: "s.19(7)"
+    consequence: "Preliminary notification deemed rescinded"
+    extendable: { by: appropriate_government, reasons_required: true }
+    on_breach: { emit: NOTIFICATION_RESCINDED, then: CASE_LAPSED }
+  - id: AWARD_S23
+    starts_on: DECLARATION_S19
+    ends_on: AWARD_S23
+    duration: { months: 12 }
+    basis: "s.25"
+    consequence: "Entire proceedings lapse"
+    extendable: { by: appropriate_government, reasons_required: true }
+    suspend_on: [COURT_STAY]
+    resume_on: [STAY_VACATED]
+    on_breach: { emit: CASE_LAPSED }
+  - id: COMPENSATION_3M
+    starts_on: AWARD_S23
+    ends_on: COMPENSATION_PAID_FULL
+    duration: { months: 3 }
+    basis: "s.38(1)"
+    consequence: "Possession cannot be taken; interest accrues"
+  - id: RR_MONETARY_6M
+    starts_on: AWARD_S23
+    ends_on: RR_ENTITLEMENT_DELIVERED
+    duration: { months: 6 }
+    basis: "s.38(1)"
+    consequence: "Monetary R&R overdue"
+  - id: RR_INFRA_18M
+    starts_on: AWARD_S23
+    duration: { months: 18 }
+    basis: "s.38(1) proviso"
+    consequence: "Infrastructural R&R overdue"
+  - id: UTILISATION_5Y
+    starts_on: POSSESSION_TAKEN_S38
+    ends_on: LAND_UTILISED
+    duration: { years: 5 }
+    basis: "s.101"
+    consequence: "Return to original owner(s) or State Land Bank"
+
+alerts:
+  thresholds: { amber: 0.75, red: 0.90 }
+  escalation: { amber: LAO, red: COLLECTOR, breached: STATE_REVENUE, lapsed: MINISTRY }

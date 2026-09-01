@@ -1,0 +1,68 @@
+# NH Act 1956 track (Fourth Schedule). Compensation and R&R per RFCTLARR apply via s.105
+# and the 2015 order. Sections per Docs/rules.md Part B2; *(verify)* items flagged inline.
+track: NH_ACT_1956
+version: "2026.09"
+stages:
+  PROPOSED:  { on: [NOTIFICATION_3A] }
+  NOTIFIED:  { on: [OBJECTION_RECEIVED, OBJECTIONS_DISPOSED, DECLARATION_3D, EXTENSION_GRANTED,
+                    NOTIFICATION_RESCINDED, CASE_LAPSED, PARCEL_ADDED, COURT_STAY, STAY_VACATED] }
+  DECLARED:  { on: [AWARD_3G, COMPENSATION_ASSESSED, EXTENSION_GRANTED, ARBITRATION_3G5,
+                    PARCEL_ADDED, FAMILY_ENUMERATED, COURT_STAY, STAY_VACATED, CASE_LAPSED] }
+  AWARDED:   { on: [PAYMENT_MADE, COMPENSATION_PAID_FULL, POSSESSION_3E, ARBITRATION_3G5,
+                    RR_AWARD_S31, COMPENSATION_ASSESSED, COURT_STAY, STAY_VACATED, EXTENSION_GRANTED] }
+  POSSESSED: { on: [RR_ENTITLEMENT_DELIVERED, LAND_UTILISED, CASE_CLOSED] }
+  LAPSED:    { on: [] }
+  CLOSED:    { on: [] }
+
+transitions:
+  NOTIFICATION_3A:        { from: PROPOSED, to: NOTIFIED, section: "3A" }
+  DECLARATION_3D:         { from: NOTIFIED, to: DECLARED, section: "3D" }   # land vests in Central Government (3D(2))
+  AWARD_3G:               { from: DECLARED, to: AWARDED, section: "3G" }
+  POSSESSION_3E:
+    from: AWARDED
+    to: POSSESSED
+    section: "3E"
+    guard: possession_payment_gate     # amount under 3G deposited/paid per 3H before possession *(verify 3E(1) proviso)*
+  CASE_LAPSED:            { from: [NOTIFIED, DECLARED], to: LAPSED, section: "3D(3)" }
+  NOTIFICATION_RESCINDED: { from: NOTIFIED, to: LAPSED, section: "3D(3)" }
+  CASE_CLOSED:            { from: POSSESSED, to: CLOSED }
+
+clocks:
+  - id: OBJECTION_3C
+    starts_on: NOTIFICATION_3A
+    duration: { days: 21 }
+    basis: "3C"
+    kind: window
+  - id: DECLARATION_3D
+    starts_on: NOTIFICATION_3A
+    ends_on: DECLARATION_3D
+    duration: { years: 1 }
+    basis: "3D(3)"
+    consequence: "3A notification ceases to have effect"
+    on_breach: { emit: NOTIFICATION_RESCINDED, then: CASE_LAPSED }
+  - id: AWARD_3G
+    starts_on: DECLARATION_3D
+    ends_on: AWARD_3G
+    duration: { months: 12 }
+    basis: "s.25 RFCTLARR via s.105 + 2015 order *(verify applicability)*"
+    consequence: "Proceedings lapse (s.25 consequence via 2015 order) *(verify)*"
+    extendable: { by: appropriate_government, reasons_required: true }
+    suspend_on: [COURT_STAY]
+    resume_on: [STAY_VACATED]
+    on_breach: { emit: CASE_LAPSED }
+  - id: COMPENSATION_3M
+    starts_on: AWARD_3G
+    ends_on: COMPENSATION_PAID_FULL
+    duration: { months: 3 }
+    basis: "s.38(1) RFCTLARR via 2015 order"
+    consequence: "Possession cannot be taken; interest accrues (3H(5))"
+  - id: UTILISATION_5Y
+    starts_on: POSSESSION_3E
+    ends_on: LAND_UTILISED
+    duration: { years: 5 }
+    basis: "s.101 RFCTLARR *(verify applicability to NH)*"
+    consequence: "Return to original owner(s) or State Land Bank"
+
+alerts:
+  thresholds: { amber: 0.75, red: 0.90 }
+  escalation: { amber: LAO, red: COLLECTOR, breached: STATE_REVENUE, lapsed: MINISTRY }

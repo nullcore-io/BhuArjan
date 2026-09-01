@@ -1,0 +1,74 @@
+name: bhuarjan
+
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    container_name: bhuarjan-db
+    environment:
+      POSTGRES_USER: bhuarjan
+      POSTGRES_PASSWORD: bhuarjan_dev
+      POSTGRES_DB: bhuarjan
+    ports:
+      - "5433:5432"
+    volumes:
+      - bhuarjan-pgdata:/var/lib/postgresql/data
+      - ./init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bhuarjan -d bhuarjan"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  minio:
+    image: minio/minio:RELEASE.2024-06-13T22-53-53Z
+    container_name: bhuarjan-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: bhuarjan
+      MINIO_ROOT_PASSWORD: bhuarjan_dev
+    ports:
+      - "9100:9000"
+      - "9101:9001"
+    volumes:
+      - bhuarjan-minio:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build: ../api
+    container_name: bhuarjan-api
+    environment:
+      DATABASE_URL: postgresql+psycopg://bhuarjan:bhuarjan_dev@db:5432/bhuarjan
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: bhuarjan
+      MINIO_SECRET_KEY: bhuarjan_dev
+      MINIO_SECURE: "false"
+      MINIO_PUBLIC_ENDPOINT: localhost:9100
+      JWT_SECRET: dev-secret-change-me
+      DEMO_MODE: "true"
+      SEED_ON_START: "true"
+    ports:
+      - "8016:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ../web
+      args:
+        VITE_API_BASE: /api/v1
+    container_name: bhuarjan-web
+    ports:
+      - "3016:80"
+    depends_on:
+      - api
+
+volumes:
+  bhuarjan-pgdata:
+  bhuarjan-minio:
