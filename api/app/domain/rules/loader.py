@@ -113,7 +113,7 @@ def rulesets_dir() -> Path:
 def load_all_rulesets() -> dict[tuple[str, str], Ruleset]:
     _REGISTRY.clear()
     d = rulesets_dir()
-    for f in sorted(d.glob("*.yaml")):
+    for f in sorted(d.rglob("*.yaml")):
         try:
             doc = yaml.safe_load(f.read_text(encoding="utf-8"))
             rs = _parse(doc)
