@@ -142,12 +142,19 @@ def load_all_rulesets() -> dict[tuple[str, str], Ruleset]:
 
 
 def get_ruleset(track: str, version: str | None = None) -> Ruleset | None:
+    """The rule-set for `track`, pinned to `version` when one is given.
+
+    A pin that is not loaded returns None — it never falls back to the newest version
+    of the track. Falling back re-evaluated live cases against rules they were not
+    filed under, which is exactly what pinning exists to prevent: a dropped-in
+    `rfctlarr_2027.yaml`, or a YAML typo that makes `load_all_rulesets` skip the
+    pinned file, would have silently recomputed every clock from new durations.
+    Callers that want "whatever is current" (project creation) pass no version.
+    """
     if not _REGISTRY:
         load_all_rulesets()
     if version:
-        rs = _REGISTRY.get((track, version))
-        if rs:
-            return rs
+        return _REGISTRY.get((track, version))
     candidates = [rs for (t, _v), rs in _REGISTRY.items() if t == track]
     if not candidates:
         return None

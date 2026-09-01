@@ -94,6 +94,25 @@ def test_3d_not_issued_within_a_year_rescinds_the_3a_notification(
     assert res.json()["ruleset_ref"] == "NH_ACT_1956@2026.09/transitions/DECLARATION_3D"
 
 
+def test_a_3a_notification_under_a_live_stay_is_not_rescinded(
+    db, world, client, auth, must_record
+):
+    """3D(3) carries no proviso, but a writ still stops the clock: the 3A notification
+    must not be deemed to cease while a court has stayed the declaration."""
+    case = world.case(db, "NH_ACT_1956", case_no="LAQ/NH/10")
+    _notify(must_record, case)
+    must_record(
+        case, "COURT_STAY", date(2026, 3, 1),
+        {"court": "High Court", "case_no": "WP 5/2026"},
+    )
+
+    headers = auth(world.lao, date(2026, 9, 28))  # a day past 3D(3)
+    clocks = clocks_on(client, case, headers)
+    assert clocks["DECLARATION_3D"]["status"] == "suspended", clocks["DECLARATION_3D"]
+    assert stage_of(db, case) == "NOTIFIED"
+    assert "NOTIFICATION_RESCINDED" not in event_types(client, case, headers)
+
+
 def test_possession_3e_uses_the_same_payment_gate(db, world, client, must_record, record):
     case = world.case(db, "NH_ACT_1956", case_no="LAQ/NH/4")
     _notify(must_record, case)
@@ -117,13 +136,15 @@ def test_possession_3e_uses_the_same_payment_gate(db, world, client, must_record
     assert body["stage"] == "POSSESSED"
 
 
-def test_compensation_paid_full_opens_the_gate_when_paise_round_short(
+def test_compensation_paid_full_does_not_open_the_gate_one_paise_short(
     db, world, client, must_record, record
 ):
-    """The award lines are the authority on whether an award is settled, and their
-    total can differ from the summed payment payloads by a paise of rounding. A
-    recorded COMPENSATION_PAID_FULL therefore satisfies the s.38 gate on its own —
-    this is the case the demo seed actually produces."""
+    """COMPENSATION_PAID_FULL is a marker, not the authority.
+
+    It used to satisfy the s.38 gate on its own, which made the gate a one-way latch:
+    once the marker was in the ledger nothing could close the gate again — not a s.64
+    enhancement that raised the award five-fold, not a payment that was a paise short.
+    The paise decide. Only the exact remainder opens possession."""
     case = world.case(db, "NH_ACT_1956", case_no="LAQ/NH/5")
     _notify(must_record, case)
     must_record(case, "DECLARATION_3D", date(2026, 2, 10), {"total_area_ha": "18.6400"})
@@ -137,12 +158,62 @@ def test_compensation_paid_full_opens_the_gate_when_paise_round_short(
         {"pfms_ref": "PFMS/A", "amount_paise": 999_999, "mode": "PFMS"},
     )
 
-    status, _ = record(case, "POSSESSION_3E", date(2026, 3, 20), {})
+    status, body = record(case, "POSSESSION_3E", date(2026, 3, 20), {})
     assert status == 422  # one paise short, and the gate says so
+    assert body["type"] == "guard_failed"
 
+    # …and the marker does not change that.
     must_record(case, "COMPENSATION_PAID_FULL", date(2026, 3, 12), {})
     status, body = record(case, "POSSESSION_3E", date(2026, 3, 20), {})
+    assert status == 422, body
+    assert body["type"] == "guard_failed"
+
+    # The remainder does.
+    must_record(
+        case, "PAYMENT_MADE", date(2026, 3, 13),
+        {"pfms_ref": "PFMS/B", "amount_paise": 1, "mode": "PFMS"},
+    )
+    status, body = record(case, "POSSESSION_3E", date(2026, 3, 20), {})
     assert status == 201, body
+    assert body["stage"] == "POSSESSED"
+
+
+def test_extending_a_clock_the_ruleset_calls_unextendable_is_refused(
+    db, world, client, auth, must_record, record
+):
+    """3D(3) carries no proviso, so `DECLARATION_3D` has no `extendable:` stanza — yet
+    an EXTENSION_GRANTED naming it used to push the deadline to 2035, and the 3D(3)
+    rescission then never fired."""
+    case = world.case(db, "NH_ACT_1956", case_no="LAQ/NH/9")
+    _notify(must_record, case)
+
+    status, body = record(
+        case, "EXTENSION_GRANTED", date(2026, 6, 1),
+        {
+            "clock_id": "DECLARATION_3D",
+            "authority": "Central Government",
+            "reasons": "alignment under revision",
+            "new_due_date": "2035-01-01",
+        },
+        user=world.collector,
+    )
+    assert status == 422, body
+    assert body["type"] == "transition_not_allowed"
+    assert body["ruleset_ref"] == "NH_ACT_1956@2026.09/clocks/DECLARATION_3D"
+    assert "not extendable" in body["detail"]
+
+    # The deadline did not move: 3D(3) still bites a year after the 3A notification.
+    clocks = clocks_on(client, case, auth(world.lao, date(2026, 6, 1)))
+    assert clocks["DECLARATION_3D"]["due_date"] == "2026-09-27"
+
+    # A clock this rule-set does not define at all is refused too.
+    status, body = record(
+        case, "EXTENSION_GRANTED", date(2026, 6, 2),
+        {"clock_id": "AWARD_S23", "reasons": "typo", "new_due_date": "2030-01-01"},
+        user=world.collector,
+    )
+    assert status == 422, body
+    assert body["type"] == "transition_not_allowed"
 
 
 def test_scheduler_sweep_evaluates_every_open_case(db, world, must_record):

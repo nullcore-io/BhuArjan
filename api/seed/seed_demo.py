@@ -232,11 +232,20 @@ def seed() -> None:
             ))
         _append(db, case2, lao, "COMPENSATION_ASSESSED", date(2025, 11, 5),
                 {"assessed_total_paise": assessed_total, "line_count": 3})
-        for pay_date, frac, ref in [(date(2025, 12, 12), 0.4, "PFMS/2025/88121"),
-                                    (date(2026, 1, 9), 0.35, "PFMS/2026/00944"),
-                                    (date(2026, 1, 28), 0.25, "PFMS/2026/02611")]:
+        # Three instalments that add up to the award *exactly*. The last one is the
+        # remainder, not a rounded fraction: truncating each instalment left the case a
+        # few paise short of the assessed total, and the s.38 gate — which now reads the
+        # paise and nothing else — would refuse possession on a fully settled award.
+        paid_so_far = 0
+        instalments = [(date(2025, 12, 12), 0.4, "PFMS/2025/88121"),
+                       (date(2026, 1, 9), 0.35, "PFMS/2026/00944"),
+                       (date(2026, 1, 28), None, "PFMS/2026/02611")]
+        for pay_date, frac, ref in instalments:
+            amount = assessed_total - paid_so_far if frac is None else int(assessed_total * frac)
+            paid_so_far += amount
             _append(db, case2, lao, "PAYMENT_MADE", pay_date,
-                    {"pfms_ref": ref, "amount_paise": int(assessed_total * frac), "mode": "PFMS"})
+                    {"pfms_ref": ref, "amount_paise": amount, "mode": "PFMS"})
+        assert paid_so_far == assessed_total, "seed case 2 must be paid to the paise"
         _append(db, case2, lao, "COMPENSATION_PAID_FULL", date(2026, 1, 28), {})
         _append(db, case2, lao, "POSSESSION_3E", date(2026, 2, 20),
                 {"memo_no": "POSS/SEO/2026/04"})
@@ -268,10 +277,11 @@ def seed() -> None:
 
         # evaluate clocks once so alerts exist at first boot
         try:
+            from app.core.time import ist_today
             from app.domain.alerts.service import evaluate_case_clocks
 
             for c in (case1, case2, case3):
-                evaluate_case_clocks(db, c, date.today())
+                evaluate_case_clocks(db, c, ist_today())
             db.commit()
         except Exception:
             log.exception("seed: initial clock evaluation failed")

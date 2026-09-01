@@ -25,11 +25,18 @@ from datetime import date
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.time import ist_today
 from app.models import Case, CaseState, Clock, Event
 
 NOTIFICATION_EVENTS = ("NOTIFICATION_3A", "PRELIM_NOTIFICATION_S11")
 POSSESSION_EVENTS = ("POSSESSION_TAKEN_S38", "POSSESSION_3E")
 OPEN_CLOCK_STATUSES = ("running", "extended", "suspended")
+# Clocks that count towards the risk score. A clock a court has suspended is
+# deliberately absent: the elapsed fraction keeps climbing while the stay is on (the
+# due date only moves when the stay is vacated), so a case lawfully frozen by a writ
+# would pin the top of every district ranking, indistinguishable from a case in
+# statutory default. Nobody is in default while a court has stopped the proceeding.
+RISK_CLOCK_STATUSES = ("running", "extended")
 BREACHED_STATUSES = ("breached", "lapsed")
 
 
@@ -114,8 +121,9 @@ def apply_event(
 
 
 def update_risk_score(db: Session, case_id: uuid.UUID) -> float:
-    """Risk = the most-elapsed open clock on the case, 0–100. A breached or lapsed
-    clock pins the case at 100 — there is no worse position than being in default."""
+    """Risk = the most-elapsed *running* clock on the case, 0–100. A breached or lapsed
+    clock pins the case at 100 — there is no worse position than being in default. A
+    clock suspended by a court order scores nothing: see RISK_CLOCK_STATUSES."""
     state = db.get(CaseState, case_id)
     if state is None:
         return 0.0
@@ -125,7 +133,7 @@ def update_risk_score(db: Session, case_id: uuid.UUID) -> float:
         if row.status in BREACHED_STATUSES:
             score = 100.0
             break
-        if row.status in OPEN_CLOCK_STATUSES and row.elapsed_pct is not None:
+        if row.status in RISK_CLOCK_STATUSES and row.elapsed_pct is not None:
             score = max(score, float(row.elapsed_pct))
     state.risk_score = round(score, 2)
     db.add(state)
@@ -196,5 +204,5 @@ def rebuild_case(db: Session, case_id: uuid.UUID, today: date | None = None) -> 
         spec = rs.transitions.get(event.type)
         apply_event(db, case, event, spec.to_stage if spec else None, initial_stage(rs))
 
-    evaluate(db, case, today or date.today(), rs)
+    evaluate(db, case, today or ist_today(), rs)
     return db.get(CaseState, case_id)

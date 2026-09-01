@@ -174,7 +174,17 @@ def create_project(
         raise Problem("validation_error", "Validation error", 422, "name is required")
 
     track = (body.statute_track or "").strip().upper()
+    # No version means "whatever is current"; an explicit version is a pin, and an
+    # unloaded pin is refused rather than quietly served the newest file.
     ruleset = get_ruleset(track, body.ruleset_version)
+    if ruleset is None and body.ruleset_version:
+        raise Problem(
+            "validation_error",
+            "Validation error",
+            422,
+            f"rule-set {track}@{body.ruleset_version} is not loaded",
+            errors=[{"field": "ruleset_version", "message": "unknown rule-set version"}],
+        )
     if ruleset is None:
         raise Problem(
             "validation_error",
@@ -182,13 +192,6 @@ def create_project(
             422,
             f"no rule-set is loaded for statute track '{track}'",
             errors=[{"field": "statute_track", "message": "unknown statute track"}],
-        )
-    if body.ruleset_version and ruleset.version != body.ruleset_version:
-        raise Problem(
-            "validation_error",
-            "Validation error",
-            422,
-            f"rule-set {track}@{body.ruleset_version} is not loaded",
         )
 
     requiring_body_id = None

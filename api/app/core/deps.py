@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.db import get_db
 from app.core.security import decode_token
+from app.core.time import ist_today
 
 bearer = HTTPBearer(auto_error=False)
 
@@ -51,7 +52,8 @@ def require_roles(*roles: str):
 
 
 def get_effective_today(request: Request) -> date:
-    """Demo clock: X-Demo-Date honoured only when DEMO_MODE=true."""
+    """Demo clock: X-Demo-Date honoured only when DEMO_MODE=true. Otherwise today in
+    IST — the statutory calendar, not the container's (Docs/rules.md C2)."""
     if settings.DEMO_MODE:
         hdr = request.headers.get("X-Demo-Date")
         if hdr:
@@ -59,7 +61,7 @@ def get_effective_today(request: Request) -> date:
                 return date.fromisoformat(hdr)
             except ValueError:
                 pass
-    return date.today()
+    return ist_today()
 
 
 DbDep = Depends(get_db)

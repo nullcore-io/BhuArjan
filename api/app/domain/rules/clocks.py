@@ -7,26 +7,34 @@ For every `ClockSpec` in the case's pinned rule-set:
             overridden by the latest EXTENSION_GRANTED `new_due_date`
             + suspended_days accumulated from vacated court stays
 
-    closed     the `ends_on` event exists with occurred_at <= today
+    closed     the `ends_on` event exists with occurred_at <= min(today, due)
     suspended  a COURT_STAY affecting this clock has no matching STAY_VACATED
     breached   today > due, and `on_breach` only marks
     lapsed     today > due, and `on_breach` emits consequence events
     extended   an extension is in force and the clock is otherwise running
     running    everything else
 
+Closure is conditioned on the terminating event being *in time*: an award recorded six
+months after the s.25 deadline does not un-lapse proceedings that have already lapsed,
+and treating it as a closure would make late recording the way to erase a statutory
+consequence.
+
 `kind: window` clocks (the s.15 objection window, 3C) are public windows, not
 deadlines on an officer: they close silently at their due date and never alert.
 
 Consequence events (`on_breach: {emit: X, then: Y}`) are appended through the ordinary
 `append_event` path as the SYSTEM actor with `occurred_at = due_date`, so a lapse is in
-the hash chain like everything else and can be audited. Re-entry is blocked per case,
-and the evaluation then re-runs so the newly-lapsed stage is visible in one call.
+the hash chain like everything else and can be audited. Re-entry is blocked per case and
+per thread, and the evaluation then re-runs so the newly-lapsed stage is visible in one
+call. A consequence the rule-set does not allow from the case's current stage is refused
+and raised as an `INTEGRITY` alert rather than forced through.
 """
 
 from __future__ import annotations
 
 import calendar
 import logging
+import threading
 import uuid
 from collections import defaultdict
 from datetime import date, timedelta
@@ -35,7 +43,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.domain.rules.loader import ClockSpec, Ruleset
-from app.models import Alert, Case, Clock, Event, User
+from app.models import AdminAudit, Alert, Case, Clock, Event, User
 
 log = logging.getLogger(__name__)
 
@@ -46,13 +54,28 @@ DEFAULT_THRESHOLDS = {"amber": 0.75, "red": 0.90}
 OPEN_STATUSES = ("running", "extended", "suspended")
 MAX_PASSES = 4  # one pass per cascade step; {emit, then} needs two
 
-# Cases whose clocks are being evaluated right now. `append_event` consults this so a
-# consequence event cannot recurse back into the engine mid-flight.
-_EVALUATING: set[uuid.UUID] = set()
+# The pseudo-clock integrity failures are filed under, so a chain mismatch or a refused
+# consequence reaches a human through the same alert centre as a statutory breach.
+INTEGRITY_CLOCK_ID = "INTEGRITY"
+
+# Cases whose clocks are being evaluated right now, per thread. `append_event` consults
+# this so a consequence event cannot recurse back into the engine mid-flight. It is
+# thread-local on purpose: a module-level set would let the hourly sweep, running in the
+# scheduler's own thread, suppress clock evaluation inside an officer's append and hand
+# them a case page showing a running clock that has legally lapsed.
+_EVALUATING = threading.local()
+
+
+def _evaluating() -> set[uuid.UUID]:
+    cases = getattr(_EVALUATING, "cases", None)
+    if cases is None:
+        cases = set()
+        _EVALUATING.cases = cases
+    return cases
 
 
 def is_evaluating(case_id: uuid.UUID) -> bool:
-    return case_id in _EVALUATING
+    return case_id in _evaluating()
 
 
 # --- date arithmetic ---------------------------------------------------------------
@@ -124,23 +147,63 @@ def _affects(event: Event, clock_id: str) -> bool:
     return True
 
 
-def _suspension(spec: ClockSpec, events: list[Event], start: date, today: date) -> tuple[int, date | None]:
-    """(suspended_days from closed stays, start date of an open stay)."""
+def _suspension(
+    spec: ClockSpec, events: list[Event], start: date, today: date
+) -> tuple[int, date | None]:
+    """(suspended_days from closed stays, start date of the earliest open stay).
+
+    Court orders are read in `occurred_at` order, not `seq` order, because a stay and
+    the order vacating it are routinely back-filled out of sequence — recording the
+    vacation first and the stay it vacated afterwards used to leave a clock suspended
+    for ever. Stays pair as a stack: a vacation closes the most recent open stay, so a
+    second writ still holds the clock after the first is lifted.
+
+    Each closed interval is clipped to the clock's own life `[start, today]`, so a stay
+    that began before the clock started still credits from the clock's start date; the
+    clipped intervals are then unioned, so two concurrent writs over the same weeks are
+    counted once. An interval that is still open credits nothing yet — it suspends the
+    clock instead, and is paid out when the court vacates it.
+    """
     if not spec.suspend_on:
         return 0, None
+    resume_on = list(spec.resume_on or [])
+
+    orders = [
+        ev
+        for ev in events
+        if (ev.type in spec.suspend_on or ev.type in resume_on)
+        and ev.occurred_at <= today
+        and _affects(ev, spec.id)
+    ]
+    orders.sort(key=lambda e: (e.occurred_at, e.seq))
+
+    open_stack: list[date] = []
+    intervals: list[tuple[date, date]] = []
+    for ev in orders:
+        if ev.type in spec.suspend_on:
+            open_stack.append(ev.occurred_at)
+        elif open_stack:
+            intervals.append((open_stack.pop(), ev.occurred_at))
+
+    clipped = sorted(
+        (max(a, start), min(b, today))
+        for a, b in intervals
+        if min(b, today) > max(a, start)
+    )
     days = 0
-    open_since: date | None = None
-    for ev in events:
-        if ev.occurred_at < start or ev.occurred_at > today:
-            continue
-        if ev.type in spec.suspend_on and _affects(ev, spec.id):
-            if open_since is None:
-                open_since = ev.occurred_at
-        elif ev.type in (spec.resume_on or []) and _affects(ev, spec.id):
-            if open_since is not None:
-                days += max(0, (ev.occurred_at - open_since).days)
-                open_since = None
-    return days, open_since
+    span_from: date | None = None
+    span_to: date | None = None
+    for a, b in clipped:
+        if span_to is None or a > span_to:
+            if span_to is not None:
+                days += (span_to - span_from).days
+            span_from, span_to = a, b
+        elif b > span_to:
+            span_to = b
+    if span_to is not None:
+        days += (span_to - span_from).days
+
+    return days, (min(open_stack) if open_stack else None)
 
 
 def _extension(spec: ClockSpec, events: list[Event], today: date) -> date | None:
@@ -182,6 +245,62 @@ def _raise_alert(db: Session, rs: Ruleset, case_id: uuid.UUID, clock_id: str, le
     db.add(Alert(case_id=case_id, clock_id=clock_id, level=level, escalated_to_role=role))
     db.flush()
     return True
+
+
+def raise_integrity_alert(
+    db: Session,
+    case_id: uuid.UUID,
+    detail: str,
+    *,
+    action: str = "integrity_mismatch",
+    meta: dict | None = None,
+    role: str = "STATE_REVENUE",
+) -> bool:
+    """File an integrity failure where a human will see it: an alert row under the
+    `INTEGRITY` pseudo-clock, deduped per case exactly like a clock alert, and an
+    admin-audit line deduped per (action, case) — separately, so a chain mismatch still
+    leaves its own audit trail on a case that already carries an alert for some other
+    integrity failure. Returns True when anything was written."""
+    written = False
+
+    alert_exists = db.scalar(
+        select(Alert.id)
+        .where(
+            Alert.case_id == case_id,
+            Alert.clock_id == INTEGRITY_CLOCK_ID,
+            Alert.level == "breached",
+        )
+        .limit(1)
+    )
+    if alert_exists is None:
+        db.add(
+            Alert(
+                case_id=case_id,
+                clock_id=INTEGRITY_CLOCK_ID,
+                level="breached",
+                escalated_to_role=role,
+            )
+        )
+        written = True
+
+    audit_exists = db.scalar(
+        select(AdminAudit.seq)
+        .where(AdminAudit.action == action, AdminAudit.target == str(case_id))
+        .limit(1)
+    )
+    if audit_exists is None:
+        db.add(
+            AdminAudit(
+                action=action,
+                target=str(case_id),
+                meta={"detail": detail, **(meta or {})},
+            )
+        )
+        written = True
+
+    if written:
+        db.flush()
+    return written
 
 
 # --- the engine --------------------------------------------------------------------
@@ -240,13 +359,19 @@ def _evaluate_once(db: Session, case: Case, rs: Ruleset, today: date) -> tuple[l
             else []
         )
 
+        # Only an `ends_on` event recorded *by* the due date closes the clock. An award
+        # made six months after the s.25 deadline does not un-lapse the proceedings, and
+        # accepting it as a closure would make late recording the way to erase a
+        # statutory consequence.
+        in_time = [e for e in closing if e.occurred_at <= due]
+
         status = "running"
         closed_on = None
         closed_seq = None
-        if closing:
+        if in_time:
             status = "closed"
-            closed_on = closing[0].occurred_at
-            closed_seq = closing[0].seq
+            closed_on = in_time[0].occurred_at
+            closed_seq = in_time[0].seq
         elif spec.kind == "window" and today > due:
             # A public window simply expires. Nobody is in default; no alert.
             status = "closed"
@@ -312,15 +437,24 @@ def _evaluate_once(db: Session, case: Case, rs: Ruleset, today: date) -> tuple[l
             for consequence in [c for c in sequence if c]:
                 if by_type.get(consequence):
                     continue  # already in the ledger; a lapse happens once
-                _emit_consequence(db, case, spec, consequence, due, today)
-                emitted = True
+                if _emit_consequence(db, case, spec, consequence, due, today):
+                    emitted = True
 
     return changed, emitted
 
 
 def _emit_consequence(
     db: Session, case: Case, spec: ClockSpec, event_type: str, due: date, today: date
-) -> None:
+) -> bool:
+    """Append one `on_breach` consequence as the SYSTEM actor. Returns True when it
+    actually entered the ledger.
+
+    A consequence the rule-set does not allow from the case's current stage is refused
+    rather than forced: forcing it produced cases sitting in LAPSED with no legal way
+    back. The refusal is logged at error level and raised as an integrity alert, because
+    a clock that has lapsed with no consequence recorded needs a human, not silence.
+    """
+    from app.core.problems import Problem
     from app.domain.events.service import append_event
 
     actor = system_user(db)
@@ -342,15 +476,42 @@ def _emit_consequence(
             today=today,
             system=True,
         )
-        log.info(
-            "clock %s on case %s breached on %s -> emitted %s",
-            spec.id, case.id, due, event_type,
+    except Problem as exc:
+        if exc.type != "transition_not_allowed":
+            log.exception(
+                "clock %s on case %s: could not emit consequence %s",
+                spec.id, case.id, event_type,
+            )
+            raise
+        log.error(
+            "clock %s on case %s lapsed on %s, but the consequence %s is not available "
+            "from the case's current stage — refusing to apply it (%s)",
+            spec.id, case.id, due, event_type, exc.detail,
         )
+        raise_integrity_alert(
+            db,
+            case.id,
+            f"clock {spec.id} lapsed on {due.isoformat()} but its consequence "
+            f"{event_type} is not available from the case's current stage: {exc.detail}",
+            action="consequence_refused",
+            meta={
+                "clock_id": spec.id,
+                "event_type": event_type,
+                "breached_on": due.isoformat(),
+                "ruleset_ref": exc.ruleset_ref,
+            },
+        )
+        return False
     except Exception:
         log.exception(
             "clock %s on case %s: could not emit consequence %s", spec.id, case.id, event_type
         )
         raise
+    log.info(
+        "clock %s on case %s breached on %s -> emitted %s",
+        spec.id, case.id, due, event_type,
+    )
+    return True
 
 
 def evaluate(db: Session, case: Case, today: date, ruleset: Ruleset | None = None) -> list[dict]:
@@ -358,11 +519,12 @@ def evaluate(db: Session, case: Case, today: date, ruleset: Ruleset | None = Non
     from app.domain.cases.projections import update_risk_score
     from app.domain.rules.engine import resolve_ruleset
 
-    if case.id in _EVALUATING:
+    running = _evaluating()
+    if case.id in running:
         return []
     rs = ruleset or resolve_ruleset(case)
 
-    _EVALUATING.add(case.id)
+    running.add(case.id)
     try:
         merged: dict[str, dict] = {}
         for _ in range(MAX_PASSES):
@@ -374,7 +536,7 @@ def evaluate(db: Session, case: Case, today: date, ruleset: Ruleset | None = Non
         else:
             log.warning("clock cascade on case %s did not settle in %s passes", case.id, MAX_PASSES)
     finally:
-        _EVALUATING.discard(case.id)
+        running.discard(case.id)
 
     update_risk_score(db, case.id)
     return list(merged.values())

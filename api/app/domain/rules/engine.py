@@ -19,6 +19,7 @@ the error can open the exact YAML stanza (Docs/APIs.md §3.4).
 from __future__ import annotations
 
 import uuid
+from datetime import date
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -31,12 +32,12 @@ from app.core.problems import (
     transition_not_allowed,
 )
 from app.domain.events.types import EVENT_TYPES
-from app.domain.rules.loader import Ruleset, TransitionSpec, get_ruleset
-from app.models import Case, CaseState, Event
+from app.domain.rules.loader import ClockSpec, Ruleset, TransitionSpec, get_ruleset
+from app.models import Case, CaseState, Clock, Event
 
 GUARD_POSSESSION_PAYMENT = "possession_payment_gate"
 URGENCY_EVENT = "URGENCY_S40_INVOKED"
-PAID_FULL_EVENT = "COMPENSATION_PAID_FULL"
+EXTENSION_EVENT = "EXTENSION_GRANTED"
 URGENCY_FRACTION = 0.8
 
 # Sections for event types that are preconditions but not transitions, so a
@@ -129,10 +130,11 @@ def is_transition(rs: Ruleset, event_type: str) -> bool:
 
 
 def is_statutory(rs: Ruleset, event_type: str) -> bool:
-    """A statutory event is one the rule-set treats as a step of the proceeding — i.e.
-    a transition key. Operational bookkeeping (PARCEL_ADDED, PAYMENT_MADE, …) is not,
-    so it is never blocked for want of a gazette copy."""
-    return is_transition(rs, event_type)
+    """A statutory event is one the rule-set treats as a step of the proceeding — a
+    transition key, plus EXTENSION_GRANTED, which moves a deadline the Act fixed.
+    Operational bookkeeping (PARCEL_ADDED, PAYMENT_MADE, …) is not, so it is never
+    blocked for want of a gazette copy."""
+    return is_transition(rs, event_type) or event_type == EXTENSION_EVENT
 
 
 # --- ledger facts ------------------------------------------------------------------
@@ -193,7 +195,6 @@ def guard_facts(db: Session, case: Case) -> dict:
         "comp_assessed_paise": assessed,
         "comp_paid_paise": paid,
         "urgency_invoked": URGENCY_EVENT in present,
-        "paid_in_full_recorded": PAID_FULL_EVENT in present,
         "event_types": present,
     }
 
@@ -207,14 +208,21 @@ def evaluate_guard(name: str, facts: dict) -> tuple[bool, str]:
     if name == GUARD_POSSESSION_PAYMENT:
         assessed = int(facts.get("comp_assessed_paise") or 0)
         paid = int(facts.get("comp_paid_paise") or 0)
+        # Nothing assessed is not "paid in full": `0 >= 0` would open the s.38 gate on
+        # a case where no award has ever been valued. The award under ss.26–30 must
+        # exist before the payment it requires can be satisfied.
+        if assessed <= 0:
+            return False, (
+                "no compensation has been assessed on this case (COMPENSATION_ASSESSED "
+                "is not in the ledger); s.38 requires the award to be assessed and paid "
+                "before possession is taken"
+            )
+        # A recorded COMPENSATION_PAID_FULL is deliberately *not* accepted on its own:
+        # it is a marker the compensation service emits, and it cannot be un-emitted by
+        # a later s.64 enhancement, so trusting it would leave the gate latched open
+        # against an award that has since grown. The paise decide.
         if paid >= assessed:
             return True, f"compensation paid {paid} of {assessed} paise"
-        if facts.get("paid_in_full_recorded"):
-            # COMPENSATION_PAID_FULL is the statutory fact s.38(1) asks for. It is
-            # emitted by the compensation service only when every award line is
-            # settled, so it stands even when the paise projection is a rounding
-            # step behind the line totals.
-            return True, "COMPENSATION_PAID_FULL recorded against the award"
         if facts.get("urgency_invoked") and paid >= URGENCY_FRACTION * assessed:
             return True, (
                 f"urgency invoked (s.40) with {paid} of {assessed} paise paid "
@@ -245,6 +253,103 @@ def guard_status(rs: Ruleset, spec: TransitionSpec | None, facts: dict) -> dict 
     }
 
 
+# --- extensions --------------------------------------------------------------------
+
+
+def _parse_date(value) -> date | None:
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str) and value.strip():
+        try:
+            return date.fromisoformat(value.strip()[:10])
+        except ValueError:
+            return None
+    return None
+
+
+def clock_spec(rs: Ruleset, clock_id: str) -> ClockSpec | None:
+    return next((c for c in rs.clocks if c.id == clock_id), None)
+
+
+def validate_extension(db: Session, case: Case, rs: Ruleset, payload: dict) -> None:
+    """EXTENSION_GRANTED is the one event that moves a statutory deadline, so the
+    rule-set — not the officer — decides whether it may (Docs/APIs.md §3.4).
+
+    A clock is extendable only if its spec says so (3D(3) carries no proviso and so no
+    `extendable:` stanza); where the stanza demands reasons, reasons must be recorded;
+    and an extension may only ever move a deadline *forward* — a mistyped year that
+    pushed `new_due_date` into the past used to lapse the case on the spot.
+    """
+    clock_id = str(payload.get("clock_id") or "").strip()
+    spec = clock_spec(rs, clock_id)
+    if spec is None:
+        raise transition_not_allowed(
+            f"EXTENSION_GRANTED must name a clock of this rule-set in payload.clock_id; "
+            f"'{clock_id or '(missing)'}' is not one of "
+            f"{', '.join(c.id for c in rs.clocks) or 'none'}",
+            ruleset_ref(rs, "clocks", clock_id or "clock_id"),
+        )
+    if not spec.extendable:
+        raise transition_not_allowed(
+            f"clock {spec.id} ({spec.basis or 'see rule-set'}) is not extendable: the "
+            "rule-set declares no `extendable:` stanza for it, so the deadline is a "
+            "hard statutory limit",
+            ruleset_ref(rs, "clocks", spec.id),
+        )
+    if spec.extendable.get("reasons_required") and not str(
+        payload.get("reasons") or ""
+    ).strip():
+        raise Problem(
+            "validation_error",
+            "Validation error",
+            422,
+            f"clock {spec.id} ({spec.basis or 'see rule-set'}) may be extended only "
+            "with the reasons recorded in payload.reasons",
+            errors=[{"field": "payload.reasons", "message": "reasons are required"}],
+            ruleset_ref=ruleset_ref(rs, "clocks", spec.id, "extendable"),
+        )
+
+    new_due = _parse_date(payload.get("new_due_date"))
+    if new_due is None:
+        raise Problem(
+            "validation_error",
+            "Validation error",
+            422,
+            "payload.new_due_date must be an ISO date (YYYY-MM-DD)",
+            errors=[
+                {
+                    "field": "payload.new_due_date",
+                    "message": "missing or not a date",
+                    "value": payload.get("new_due_date"),
+                }
+            ],
+            ruleset_ref=ruleset_ref(rs, "clocks", spec.id),
+        )
+    row = db.scalar(
+        select(Clock).where(Clock.case_id == case.id, Clock.clock_id == spec.id)
+    )
+    current_due = row.due_date if row is not None else None
+    if current_due is not None and new_due <= current_due:
+        raise Problem(
+            "validation_error",
+            "Validation error",
+            422,
+            f"new_due_date {new_due.isoformat()} is not later than the current due date "
+            f"{current_due.isoformat()} of clock {spec.id}; an extension may only move a "
+            "deadline forward",
+            errors=[
+                {
+                    "field": "payload.new_due_date",
+                    "message": "must be later than the clock's current due date",
+                    "new_due_date": new_due.isoformat(),
+                    "current_due_date": current_due.isoformat(),
+                    "clock_id": spec.id,
+                }
+            ],
+            ruleset_ref=ruleset_ref(rs, "clocks", spec.id),
+        )
+
+
 # --- the append-time check ---------------------------------------------------------
 
 
@@ -263,8 +368,13 @@ def validate_append(
 
     `system=True` is the clock engine emitting a statutory consequence (s.19(7)
     rescission, s.25 lapse). The statute has already operated at that point; the
-    stage/precondition/guard/document checks describe what an *officer* may record,
-    so they are bypassed — the consequence still moves the case to `to_stage`.
+    precondition/guard/document checks describe what an *officer* may record, so they
+    are bypassed — but `from_stages` is not. A consequence that is not available from
+    the case's current stage is refused: dragging an AWARDED case into LAPSED along a
+    transition the rule-set declares only `from: [NOTIFIED, DECLARED]` leaves a case
+    that no officer can correct. The one exception is a consequence whose `to_stage`
+    is the stage the case is already in — the `{emit, then}` cascade's second step,
+    which writes the fact into the ledger and moves nothing.
     """
     payload = payload or {}
 
@@ -278,9 +388,22 @@ def validate_append(
         )
 
     spec = rs.transitions.get(event_type)
-    statutory = spec is not None
+    # EXTENSION_GRANTED is not a transition, but it moves a statutory deadline, so it
+    # is statutory paper like one (Docs/APIs.md §3.4).
+    statutory = spec is not None or event_type == EXTENSION_EVENT
 
     if system:
+        if (
+            spec is not None
+            and spec.from_stages
+            and stage not in spec.from_stages
+            and spec.to_stage != stage
+        ):
+            raise transition_not_allowed(
+                f"consequence {event_type} is not available from stage {stage}; the "
+                f"rule-set allows it from {', '.join(spec.from_stages)}",
+                ruleset_ref(rs, "transitions", event_type),
+            )
         return {
             "to_stage": spec.to_stage if spec else None,
             "transition": spec,
@@ -327,6 +450,8 @@ def validate_append(
                 f"permitted here: {', '.join(rs.allowed_event_types(stage)) or 'none'}",
                 ruleset_ref(rs, "stages", stage),
             )
+        if event_type == EXTENSION_EVENT:
+            validate_extension(db, case, rs, payload)
 
     # (d) statutory events need paper.
     if statutory and document_id is None and not payload.get("no_document_reason"):
@@ -388,7 +513,7 @@ def allowed_events(
                 "guard_ok": True if gs is None else bool(gs["ok"]),
                 "is_transition": spec is not None,
                 "to_stage": spec.to_stage if spec else stage,
-                "document_required": spec is not None,
+                "document_required": is_statutory(rs, event_type),
                 "already_recorded": event_type in present,
                 "ruleset_ref": ruleset_ref(
                     rs, "transitions" if spec else "stages", event_type if spec else stage

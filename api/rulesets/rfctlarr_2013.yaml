@@ -1,22 +1,28 @@
 # RFCTLARR Act 2013 — primary track. Sections per Docs/rules.md Part B (domain owner verifies against bare Act).
 track: RFCTLARR_2013
 version: "2026.09"
+# EVENT_REVERSED appears on every stage, terminal stages included: Docs/rules.md C1
+# makes it the *only* legal way to correct a mis-recorded event, so a case that has
+# lapsed on a mistake must still be able to carry the correction. It is not a
+# transition — recording it moves no stage.
 stages:
-  PROPOSED:        { on: [SIA_NOTIFIED, SIA_EXEMPTED_S40] }
-  SIA:             { on: [SIA_PUBLIC_HEARING, SIA_REPORT_PUBLISHED, EXPERT_GROUP_APPRAISAL, GOVT_DECISION_S8] }
-  APPRAISED:       { on: [PRELIM_NOTIFICATION_S11] }
+  PROPOSED:        { on: [SIA_NOTIFIED, SIA_EXEMPTED_S40, EVENT_REVERSED] }
+  SIA:             { on: [SIA_PUBLIC_HEARING, SIA_REPORT_PUBLISHED, EXPERT_GROUP_APPRAISAL, GOVT_DECISION_S8,
+                          EVENT_REVERSED] }
+  APPRAISED:       { on: [PRELIM_NOTIFICATION_S11, EVENT_REVERSED] }
   NOTIFIED:        { on: [SURVEY_COMPLETED_S12, OBJECTION_RECEIVED, OBJECTIONS_DISPOSED,
                           RR_SCHEME_DRAFTED_S16, RR_SCHEME_APPROVED_S17, RR_SCHEME_PUBLISHED_S18,
                           COST_DEPOSITED_S19_2, DECLARATION_S19, EXTENSION_GRANTED, NOTIFICATION_RESCINDED,
-                          PARCEL_ADDED, FAMILY_ENUMERATED, COURT_STAY, STAY_VACATED] }
+                          PARCEL_ADDED, FAMILY_ENUMERATED, COURT_STAY, STAY_VACATED, EVENT_REVERSED] }
   DECLARED:        { on: [NOTICE_S21, CLAIMS_RECEIVED, AWARD_S23, EXTENSION_GRANTED, CASE_LAPSED,
-                          PARCEL_ADDED, FAMILY_ENUMERATED, COURT_STAY, STAY_VACATED] }
+                          PARCEL_ADDED, FAMILY_ENUMERATED, COURT_STAY, STAY_VACATED, EVENT_REVERSED] }
   AWARDED:         { on: [RR_AWARD_S31, COMPENSATION_ASSESSED, PAYMENT_MADE, COMPENSATION_PAID_FULL,
                           POSSESSION_TAKEN_S38, URGENCY_S40_INVOKED, REFERENCE_FILED_S64,
-                          COURT_STAY, STAY_VACATED, EXTENSION_GRANTED] }
-  POSSESSED:       { on: [RR_ENTITLEMENT_DELIVERED, LAND_UTILISED, LAND_RETURNED_S101, CASE_CLOSED] }
-  LAPSED:          { on: [] }
-  CLOSED:          { on: [] }
+                          COURT_STAY, STAY_VACATED, EXTENSION_GRANTED, EVENT_REVERSED] }
+  POSSESSED:       { on: [RR_ENTITLEMENT_DELIVERED, LAND_UTILISED, LAND_RETURNED_S101, CASE_CLOSED,
+                          EVENT_REVERSED] }
+  LAPSED:          { on: [EVENT_REVERSED] }
+  CLOSED:          { on: [EVENT_REVERSED] }
 
 transitions:
   SIA_NOTIFIED:             { from: PROPOSED, to: SIA, section: "s.4(1)" }
@@ -58,6 +64,10 @@ clocks:
     basis: "s.19(7)"
     consequence: "Preliminary notification deemed rescinded"
     extendable: { by: appropriate_government, reasons_required: true }
+    # A declaration the High Court has stayed cannot be "not made in time": the period
+    # of the stay is excluded before the notification is deemed rescinded.
+    suspend_on: [COURT_STAY]
+    resume_on: [STAY_VACATED]
     on_breach: { emit: NOTIFICATION_RESCINDED, then: CASE_LAPSED }
   - id: AWARD_S23
     starts_on: DECLARATION_S19

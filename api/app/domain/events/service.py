@@ -1,12 +1,18 @@
 """Event append service — THE core write.
 
 Contract (Docs/Backend.md §4, Docs/APIs.md §3.4):
-- One transaction: lock last event hash per case FOR UPDATE → validate transition
-  against the pinned ruleset (stage, requires, guard) → insert with prev_hash/hash →
-  update case_state projection → evaluate clocks (close/start/extend/suspend) →
-  return AppendResult. Idempotency-Key replay returns the original result.
+- One transaction: lock the case (case_state row, then the chain head) FOR UPDATE →
+  Idempotency-Key replay → validate transition against the pinned ruleset (stage,
+  requires, guard) → insert with prev_hash/hash → update case_state projection →
+  evaluate clocks (close/start/extend/suspend) → return AppendResult.
 - Raises app.core.problems Problems: transition_not_allowed, precondition_failed,
   guard_failed, document_required, stale_state.
+
+Idempotency. The key lookup runs *inside* the lock, so two retries of the same request
+on one case cannot both miss the replay; the insert additionally runs in a savepoint and
+answers a lost unique-index race as a replay rather than a 500. A key stands for one
+request: replaying it with a different type, date, document or payload is a
+validation_error, not a silently discarded statutory event.
 
 The function flushes but never commits: the caller owns the transaction, so a router
 that also writes parcels or compensation lines gets one atomic unit with the ledger.
@@ -27,9 +33,11 @@ from dataclasses import dataclass, field
 from datetime import date
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.problems import Problem, stale_state
+from app.core.time import ist_today
 from app.domain.events.hash import compute_hash, event_fields, to_hex
 from app.models import Case, CaseState, Event
 
@@ -45,9 +53,67 @@ class AppendResult:
     duplicate: bool = False  # idempotent replay
 
 
-def _replay(db: Session, case: Case, existing: Event) -> AppendResult:
+def _differences(
+    existing: Event,
+    event_type: str,
+    occurred_at: date,
+    document_id: uuid.UUID | None,
+    payload: dict,
+) -> list[str]:
+    """How a replayed request differs from the event the key already bought."""
+    diffs: list[str] = []
+    if existing.type != event_type:
+        diffs.append(f"type {existing.type!r} -> {event_type!r}")
+    if existing.occurred_at != occurred_at:
+        diffs.append(f"occurred_at {existing.occurred_at} -> {occurred_at}")
+    if (existing.document_id or None) != (document_id or None):
+        diffs.append(f"document_id {existing.document_id} -> {document_id}")
+    if (existing.payload or {}) != (payload or {}):
+        diffs.append("payload differs")
+    return diffs
+
+
+def _replay(
+    db: Session,
+    case: Case,
+    existing: Event,
+    event_type: str,
+    occurred_at: date,
+    document_id: uuid.UUID | None,
+    payload: dict,
+) -> AppendResult:
+    """Return the event a re-used Idempotency-Key already bought.
+
+    A key stands for one request, not for "whatever arrives next": replaying it with a
+    different event silently discarded a statutory append and answered 201 with the
+    first event's seq, so the officer's screen showed a success that never happened.
+    """
     from app.domain.rules.engine import current_stage
 
+    if existing.case_id != case.id:
+        raise Problem(
+            "validation_error",
+            "Validation error",
+            422,
+            "Idempotency-Key has already been used on a different case",
+        )
+    diffs = _differences(existing, event_type, occurred_at, document_id, payload)
+    if diffs:
+        raise Problem(
+            "validation_error",
+            "Validation error",
+            422,
+            "Idempotency-Key has already been used on this case for a different "
+            f"request ({'; '.join(diffs)}); use a fresh key to record a new event",
+            errors=[
+                {
+                    "field": "Idempotency-Key",
+                    "message": "already used for a different request",
+                    "recorded_seq": existing.seq,
+                    "recorded_type": existing.type,
+                }
+            ],
+        )
     return AppendResult(
         seq=existing.seq,
         id=existing.id,
@@ -57,6 +123,13 @@ def _replay(db: Session, case: Case, existing: Event) -> AppendResult:
         clocks_changed=[],
         duplicate=True,
     )
+
+
+def _is_idempotency_conflict(exc: IntegrityError) -> bool:
+    """True when the insert lost the race for a unique Idempotency-Key."""
+    orig = getattr(exc, "orig", None)
+    constraint = getattr(getattr(orig, "diag", None), "constraint_name", None) or ""
+    return "idempotency_key" in (constraint or str(orig))
 
 
 def append_event(
@@ -76,27 +149,16 @@ def append_event(
     from app.domain.rules import clocks as clock_engine
     from app.domain.rules.engine import initial_stage, resolve_ruleset, validate_append
 
-    today = today or date.today()
+    today = today or ist_today()
     payload = dict(payload or {})
+    if system:
+        # Stamped before the replay comparison so a replayed consequence compares equal
+        # to the one already in the ledger.
+        payload.setdefault("system", True)
     if isinstance(occurred_at, str):
         occurred_at = date.fromisoformat(occurred_at[:10])
 
-    # --- 1. idempotent replay -----------------------------------------------------
-    if idempotency_key:
-        existing = db.scalar(
-            select(Event).where(Event.idempotency_key == idempotency_key)
-        )
-        if existing is not None:
-            if existing.case_id != case.id:
-                raise Problem(
-                    "validation_error",
-                    "Validation error",
-                    422,
-                    "Idempotency-Key has already been used on a different case",
-                )
-            return _replay(db, case, existing)
-
-    # --- 2. serialise appends on this case ----------------------------------------
+    # --- 1. serialise appends on this case ----------------------------------------
     # The chain head is what two concurrent appends race for, so that is what we lock
     # (Docs/Backend.md §4). The projection row is locked too: it exists even when the
     # ledger is empty, so the very first append on a case is serialised as well.
@@ -106,6 +168,21 @@ def append_event(
     db.execute(
         select(CaseState.case_id).where(CaseState.case_id == case.id).with_for_update()
     ).first()
+
+    # --- 2. idempotent replay, inside the lock ------------------------------------
+    # Looking the key up before the lock let two concurrent retries of the same request
+    # both miss the replay; the loser then died on the unique index with a 500 instead
+    # of replaying. Everything on one case is serialised here, and the flush below
+    # catches the cross-case race the row lock cannot cover.
+    if idempotency_key:
+        existing = db.scalar(
+            select(Event).where(Event.idempotency_key == idempotency_key)
+        )
+        if existing is not None:
+            return _replay(
+                db, case, existing, event_type, occurred_at, document_id, payload
+            )
+
     head = db.execute(
         select(Event.hash)
         .where(Event.case_id == case.id)
@@ -128,8 +205,6 @@ def append_event(
         db, case, rs, event_type, stage,
         document_id=document_id, payload=payload, system=system,
     )
-    if system:
-        payload.setdefault("system", True)
 
     # --- 5. append to the chain ----------------------------------------------------
     event = Event(
@@ -144,8 +219,24 @@ def append_event(
         prev_hash=prev_hash,
     )
     event.hash = compute_hash(prev_hash, event_fields(event))
-    db.add(event)
-    db.flush()  # assigns seq
+    savepoint = db.begin_nested()
+    try:
+        db.add(event)
+        db.flush()  # assigns seq
+    except IntegrityError as exc:
+        savepoint.rollback()
+        if not (idempotency_key and _is_idempotency_conflict(exc)):
+            raise
+        # Another transaction committed this key while we were writing. It is the same
+        # request arriving twice, so answer it the way the first one was answered.
+        existing = db.scalar(
+            select(Event).where(Event.idempotency_key == idempotency_key)
+        )
+        if existing is None:
+            raise
+        return _replay(db, case, existing, event_type, occurred_at, document_id, payload)
+    else:
+        savepoint.commit()
 
     # --- 6. projection -------------------------------------------------------------
     state = apply_event(db, case, event, verdict["to_stage"], initial_stage(rs))
@@ -179,9 +270,49 @@ def case_events(db: Session, case_id: uuid.UUID) -> list[Event]:
 
 
 def verify_case_chain(db: Session, case_id: uuid.UUID) -> dict:
-    """Recompute the whole chain from the stored rows (Docs/APIs.md §3.3)."""
+    """Recompute the whole chain from the stored rows (Docs/APIs.md §3.3).
+
+    Recomputing hashes catches an edited row and a deleted row in the middle of the
+    chain, but not a *truncated tail*: delete the last event and the shortened chain
+    still recomputes perfectly, because nothing in it says how long it should be. So
+    the chain is also checked against `case_state.as_of_seq`, which the projection
+    advances on every append — the one number outside the ledger that remembers how far
+    the ledger reached. Deleting the head event, or every event of the case, leaves
+    `as_of_seq` pointing past the end and is reported as the tampering it is.
+    """
     from app.domain.events.hash import verify_chain
 
     # Expire first: a chain check must read the database, not a cached identity map.
     db.expire_all()
-    return verify_chain(case_events(db, case_id))
+    events = case_events(db, case_id)
+    result = verify_chain(events)
+    if not result["verified"]:
+        return result
+
+    state = db.get(CaseState, case_id)
+    as_of_seq = None if state is None or state.as_of_seq is None else int(state.as_of_seq)
+    if as_of_seq is None:
+        return result
+
+    max_seq = max((int(e.seq) for e in events), default=None)
+    if max_seq is None:
+        return {
+            **result,
+            "verified": False,
+            "first_bad_seq": as_of_seq,
+            "reason": (
+                f"the ledger for this case is empty, but case_state was folded up to "
+                f"seq {as_of_seq}: every event has been deleted behind the API"
+            ),
+        }
+    if max_seq < as_of_seq:
+        return {
+            **result,
+            "verified": False,
+            "first_bad_seq": as_of_seq,
+            "reason": (
+                f"the ledger ends at seq {max_seq} but case_state was folded up to seq "
+                f"{as_of_seq}: the tail of the chain has been deleted behind the API"
+            ),
+        }
+    return result
