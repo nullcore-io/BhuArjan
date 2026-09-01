@@ -239,12 +239,11 @@ function clamp(n: number, lo: number, hi: number): number {
 
 /* ----------------------------------------------------------- clock helpers */
 
-/** Fraction 0..1. Uses server `elapsed_pct` when present (0–1 or 0–100). */
+/** Fraction 0..1. The server's `elapsed_pct` is always 0–100 (see /cases/{id}/clocks). */
 export function clockElapsed(c: Clock): number {
   const raw = c.elapsed_pct
   if (raw != null && Number.isFinite(Number(raw))) {
-    const n = Number(raw)
-    return clamp(n > 1.5 ? n / 100 : n, 0, 1)
+    return clamp(Number(raw) / 100, 0, 1)
   }
   const s = Date.parse(c.start_date ?? '')
   const d = Date.parse(c.due_date ?? '')

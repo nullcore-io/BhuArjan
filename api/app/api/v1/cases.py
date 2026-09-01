@@ -436,6 +436,15 @@ def append_case_event(
     except Exception:
         db.rollback()
         raise
+
+    # The confirm step of the record-event flow: committing the event is what turns a
+    # proposed extraction into a confirmed one (Docs/rules.md C4).
+    if document_id is not None and not result.duplicate:
+        from app.models import Document
+
+        doc = db.get(Document, document_id)
+        if doc is not None and doc.extraction_status == "proposed":
+            doc.extraction_status = "confirmed"
     db.commit()
 
     if result.duplicate:

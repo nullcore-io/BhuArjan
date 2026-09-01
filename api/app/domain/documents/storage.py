@@ -49,6 +49,7 @@ def client() -> Minio:
             access_key=settings.MINIO_ACCESS_KEY,
             secret_key=settings.MINIO_SECRET_KEY,
             secure=settings.MINIO_SECURE,
+            region="us-east-1",  # pinned: skips the GetBucketLocation round-trip
         )
     return _client
 
@@ -64,6 +65,10 @@ def public_client() -> Minio:
             access_key=settings.MINIO_ACCESS_KEY,
             secret_key=settings.MINIO_SECRET_KEY,
             secure=settings.MINIO_SECURE,
+            # The public endpoint is the browser's address for MinIO; from inside the
+            # API container it is unreachable, so the region must be pinned or the
+            # signer would try a GetBucketLocation call against it.
+            region="us-east-1",
         )
     return _public_client
 

@@ -15,7 +15,8 @@ body {
 }
 
 .btn-primary {
-  @apply btn bg-accent text-white border-accent hover:bg-[#173c78];
+  /* not `@apply btn ...` — the expansion re-applies btn's white background last */
+  @apply inline-flex items-center gap-1 rounded border border-accent bg-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-[#173c78] disabled:opacity-50 disabled:cursor-not-allowed;
 }
 
 .badge {
