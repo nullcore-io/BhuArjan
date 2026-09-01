@@ -48,11 +48,25 @@ class User(Base):
 
 class RoleAssignment(Base):
     __tablename__ = "role_assignments"
-    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), primary_key=True)
-    role: Mapped[str] = mapped_column(Text, primary_key=True)
+    # A national role (MINISTRY, AUDITOR) has no org unit, and PostgreSQL will not
+    # accept a NULL inside a primary key — so the natural triple is a unique index
+    # over a surrogate key rather than the primary key itself.
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uid)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True)
+    role: Mapped[str] = mapped_column(Text)
     org_unit_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("org_units.id"), primary_key=True, nullable=True
+        ForeignKey("org_units.id"), nullable=True
     )
+
+
+Index(
+    "uq_role_assignments",
+    RoleAssignment.user_id,
+    RoleAssignment.role,
+    RoleAssignment.org_unit_id,
+    unique=True,
+    postgresql_nulls_not_distinct=True,
+)
 
 
 class Project(Base):
@@ -95,6 +109,7 @@ class Event(Base):
 
 
 Index("ix_events_case_seq", Event.case_id, Event.seq)
+Index("ix_events_case_type", Event.case_id, Event.type)
 
 
 class Document(Base):
@@ -181,9 +196,19 @@ class Clock(Base):
     closed_seq: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     closed_on: Mapped[date | None] = mapped_column(Date, nullable=True)
     suspended_days: Mapped[int] = mapped_column(Integer, default=0)
+    # --- clock-engine projection detail (lane B1) ---
+    kind: Mapped[str] = mapped_column(Text, default="deadline")  # deadline|window
+    extendable: Mapped[dict | None] = mapped_column(JSONB, nullable=True)  # {by, reasons_required}
+    original_due_date: Mapped[date | None] = mapped_column(Date, nullable=True)  # start + duration
+    extended_due_date: Mapped[date | None] = mapped_column(Date, nullable=True)  # EXTENSION_GRANTED
+    stay_started_on: Mapped[date | None] = mapped_column(Date, nullable=True)  # open COURT_STAY
+    elapsed_pct: Mapped[float | None] = mapped_column(Numeric(6, 2), nullable=True)
 
 
-Index("ix_clocks_case", Clock.case_id, Clock.clock_id)
+# One row per (case, clock) — the engine upserts on it, and lane B2 relies on the
+# uniqueness for ON CONFLICT.
+Index("ix_clocks_case", Clock.case_id, Clock.clock_id, unique=True)
+Index("ix_clocks_status_due", Clock.status, Clock.due_date)
 
 
 class Alert(Base):
@@ -196,6 +221,10 @@ class Alert(Base):
     escalated_to_role: Mapped[str | None] = mapped_column(Text, nullable=True)
     acknowledged_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+# Alerts are deduped per (case, clock, level) by the clock engine.
+Index("ix_alerts_case_clock_level", Alert.case_id, Alert.clock_id, Alert.level, unique=True)
 
 
 class AdminAudit(Base):

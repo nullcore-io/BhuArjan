@@ -48,9 +48,12 @@ CREATE TABLE users (
   id uuid PRIMARY KEY, email text UNIQUE, name text, active bool DEFAULT true
 );
 CREATE TABLE role_assignments (
+  id uuid PRIMARY KEY,
   user_id uuid REFERENCES users(id), role text NOT NULL,
-  org_unit_id uuid REFERENCES org_units(id),         -- jurisdiction scope
-  PRIMARY KEY (user_id, role, org_unit_id)
+  org_unit_id uuid REFERENCES org_units(id),         -- jurisdiction scope; NULL = national
+  UNIQUE NULLS NOT DISTINCT (user_id, role, org_unit_id)
+  -- surrogate key, not the natural triple: a national role (MINISTRY, AUDITOR) has no
+  -- org unit, and PostgreSQL will not accept a NULL inside a primary key
 );
 
 -- projects & cases
@@ -129,7 +132,12 @@ CREATE TABLE clocks (
   basis text, consequence text,
   started_seq bigint, start_date date, due_date date,
   status text,                                          -- running|closed|extended|suspended|breached|lapsed
-  closed_seq bigint, suspended_days int DEFAULT 0
+  closed_seq bigint, closed_on date, suspended_days int DEFAULT 0,
+  kind text DEFAULT 'deadline',                         -- deadline|window
+  extendable jsonb,                                     -- {by, reasons_required} from the rule-set
+  original_due_date date, extended_due_date date,       -- start+duration, and any EXTENSION_GRANTED
+  stay_started_on date, elapsed_pct numeric(6,2),
+  UNIQUE (case_id, clock_id)                            -- one row per case clock; the engine upserts
 );
 CREATE TABLE alerts (
   id uuid PRIMARY KEY, case_id uuid, clock_id text, level text,   -- amber|red|black

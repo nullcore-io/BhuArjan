@@ -59,8 +59,25 @@ class Ruleset:
 _REGISTRY: dict[tuple[str, str], Ruleset] = {}
 
 
+def _stage_on(spec) -> list[str]:
+    """The `on:` list of a stage.
+
+    YAML 1.1 (which PyYAML implements) resolves a bare `on` to the boolean `True`, so
+    `{ on: [...] }` arrives keyed by `True`, not `"on"`. Quoting the key in every
+    rule-set would work but would make the YAML worse to read for the officer who has
+    to review it — so both spellings are accepted here instead.
+    """
+    spec = spec or {}
+    if not isinstance(spec, dict):
+        return []
+    value = spec.get("on", spec.get(True, []))
+    if isinstance(value, str):
+        return [value]
+    return list(value or [])
+
+
 def _parse(doc: dict) -> Ruleset:
-    stages = {name: (spec or {}).get("on", []) for name, spec in (doc.get("stages") or {}).items()}
+    stages = {name: _stage_on(spec) for name, spec in (doc.get("stages") or {}).items()}
     transitions: dict[str, TransitionSpec] = {}
     for ev, spec in (doc.get("transitions") or {}).items():
         spec = spec or {}

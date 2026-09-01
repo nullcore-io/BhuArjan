@@ -209,6 +209,20 @@ def kpis(db: Session, case_ids: list[uuid.UUID] | None, today: date) -> dict:
     clocks_by_status = {status or "unknown": _i(count) for status, count in clock_rows}
     total_clocks = sum(clocks_by_status.values())
     adherent = sum(clocks_by_status.get(s, 0) for s in ADHERENT_STATUSES)
+    # A running clock past the red threshold (>=90% elapsed) is not adherent even
+    # though it has not breached yet — otherwise a dashboard full of red clocks
+    # reports 100% adherence right up to the day the case lapses.
+    red_running = 0
+    running_rows = db.execute(
+        _scoped(select(Clock.start_date, Clock.due_date), case_ids, Clock.case_id)
+        .where(Clock.status.in_(("running", "extended")))
+    ).all()
+    for start, due in running_rows:
+        if start and due and due > start:
+            elapsed = (today - start).days / (due - start).days
+            if elapsed >= 0.90:
+                red_running += 1
+    adherent = max(adherent - red_running, 0)
     timeline_adherence = round(100.0 * adherent / total_clocks, 2) if total_clocks else 100.0
 
     # --- derived percentages -----------------------------------------------------
