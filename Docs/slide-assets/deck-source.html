@@ -1,0 +1,396 @@
+<title>BhuArjan Idea Deck</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600;8..60,700&family=Noto+Sans:wght@400;500;600;700&family=Noto+Sans+Devanagari:wght@400;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --ground:#EEF1F5; --paper:#FFFFFF; --panel:#F6F7F9;
+    --ink:#14213D; --muted:#5B6675; --faint:#8A95A6;
+    --accent:#1F4E9C; --accent-soft:#E7EDF7; --saffron:#B9770E;
+    --border:#D9DEE5; --hair:#E4E8EE;
+    --ok:#2E7D32; --amber:#C77700; --red:#B3261E; --black:#1B1B1B;
+    --shadow:0 1px 2px rgba(20,33,61,.06), 0 8px 30px rgba(20,33,61,.08);
+    --serif:"Source Serif 4",Georgia,serif;
+    --sans:"Noto Sans","Noto Sans Devanagari",system-ui,sans-serif;
+    --mono:"IBM Plex Mono",ui-monospace,monospace;
+  }
+  :root:not([data-theme="light"]) {
+    @media (prefers-color-scheme: dark) {
+      --ground:#0C1220; --paper:#141E36; --panel:#101a30;
+      --ink:#EAF0FA; --muted:#9FADC4; --faint:#6C7A93;
+      --accent:#7AA6EA; --accent-soft:#1B2C4C; --saffron:#E1A94E;
+      --border:#26324C; --hair:#1F2A42;
+      --ok:#6FBF73; --amber:#E1A94E; --red:#E8695E; --black:#C6CEDC;
+      --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 34px rgba(0,0,0,.45);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground:#0C1220; --paper:#141E36; --panel:#101a30;
+    --ink:#EAF0FA; --muted:#9FADC4; --faint:#6C7A93;
+    --accent:#7AA6EA; --accent-soft:#1B2C4C; --saffron:#E1A94E;
+    --border:#26324C; --hair:#1F2A42;
+    --ok:#6FBF73; --amber:#E1A94E; --red:#E8695E; --black:#C6CEDC;
+    --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 34px rgba(0,0,0,.45);
+  }
+
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--ground); color:var(--ink); font-family:var(--sans);
+    -webkit-font-smoothing:antialiased; }
+
+  /* ---- deck shell ---- */
+  .deck { min-height:100vh; display:flex; flex-direction:column; }
+  .stage { flex:1; display:grid; place-items:center; padding:clamp(12px,3vw,40px); }
+  .slide {
+    width:min(1120px,100%); aspect-ratio:16/9; background:var(--paper);
+    border:1px solid var(--border); border-radius:10px; box-shadow:var(--shadow);
+    position:relative; overflow:hidden; display:none;
+    padding:clamp(20px,3.4vw,46px);
+  }
+  .slide.active { display:grid; }
+  .slide::before { /* saffron hairline, the only warm accent */
+    content:""; position:absolute; inset:0 0 auto 0; height:3px;
+    background:linear-gradient(90deg,var(--saffron) 0 34%,var(--accent) 34% 100%); opacity:.9;
+  }
+  @media (max-width:720px){ .slide{ aspect-ratio:auto; min-height:78vh; } }
+
+  .eyebrow { font-family:var(--mono); font-size:.7rem; letter-spacing:.16em; text-transform:uppercase;
+    color:var(--accent); font-weight:600; display:flex; align-items:center; gap:.6em; }
+  .eyebrow .sn { color:var(--faint); }
+  h1,h2,h3 { font-family:var(--serif); font-weight:600; color:var(--ink); text-wrap:balance; margin:0; line-height:1.08; }
+  .lead { font-size:clamp(1rem,1.5vw,1.24rem); color:var(--muted); line-height:1.5; max-width:64ch; }
+  p { margin:0; }
+  .dev { font-family:var(--sans); }
+
+  ul.pts { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:.5em; }
+  ul.pts li { position:relative; padding-left:1.2em; line-height:1.42; font-size:.95rem; color:var(--ink); }
+  ul.pts li::before { content:""; position:absolute; left:0; top:.62em; width:.42em; height:.42em;
+    background:var(--accent); border-radius:1px; transform:rotate(45deg); }
+  ul.pts li b { font-weight:600; }
+  .sec { color:var(--saffron); font-family:var(--mono); font-size:.86em; font-weight:600; white-space:nowrap; }
+
+  .grid2 { display:grid; grid-template-columns:1.05fr .95fr; gap:clamp(18px,3vw,40px); align-items:center; height:100%; }
+  .grid-r { display:grid; grid-template-columns:1fr 1fr; gap:22px; align-content:center; height:100%; }
+  .stack { display:flex; flex-direction:column; gap:1.1em; min-width:0; }
+  .kicker { font-family:var(--mono); font-size:.72rem; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); font-weight:600; }
+
+  .shot { border:1px solid var(--border); border-radius:8px; overflow:hidden; box-shadow:var(--shadow); background:var(--panel); }
+  .shot img { display:block; width:100%; height:auto; }
+  .shot figcaption { font-family:var(--mono); font-size:.68rem; color:var(--muted); padding:.5em .8em;
+    border-top:1px solid var(--hair); background:var(--paper); letter-spacing:.02em; }
+
+  /* ---- clock gauge (the thesis object) ---- */
+  .clockwrap { display:flex; flex-direction:column; align-items:center; gap:.9em; }
+  .gauge { position:relative; width:min(300px,52vw); aspect-ratio:1; }
+  .gauge svg { width:100%; height:100%; transform:rotate(-90deg); }
+  .gauge .track { fill:none; stroke:var(--hair); stroke-width:12; }
+  .gauge .fill { fill:none; stroke:var(--red); stroke-width:12; stroke-linecap:round;
+    transition:stroke-dashoffset 1.1s cubic-bezier(.4,0,.2,1); }
+  .gauge .center { position:absolute; inset:0; display:grid; place-content:center; text-align:center; gap:.15em; }
+  .gauge .pct { font-family:var(--mono); font-weight:600; font-size:2.4rem; color:var(--red); line-height:1; }
+  .gauge .lab { font-family:var(--mono); font-size:.66rem; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); }
+  .chip { display:inline-flex; align-items:center; gap:.5em; font-family:var(--mono); font-size:.72rem; font-weight:600;
+    padding:.32em .7em; border-radius:4px; letter-spacing:.03em; }
+  .chip.red { background:color-mix(in srgb,var(--red) 14%,transparent); color:var(--red); border:1px solid color-mix(in srgb,var(--red) 40%,transparent); }
+  .chip .dot { width:.5em; height:.5em; border-radius:50%; background:currentColor; }
+
+  /* ---- title slide ---- */
+  .title-slide { grid-template-columns:1.15fr .85fr; }
+  .word { display:flex; flex-direction:column; gap:.1em; }
+  .word .en { font-family:var(--serif); font-weight:700; font-size:clamp(2.6rem,6vw,4.4rem); letter-spacing:-.01em; }
+  .word .hi { font-family:"Noto Sans Devanagari",var(--sans); font-weight:600; font-size:clamp(1.3rem,3vw,2rem); color:var(--saffron); }
+  .metatab { display:grid; grid-template-columns:auto 1fr; gap:.35em 1.2em; font-size:.82rem; margin-top:.4em; }
+  .metatab dt { font-family:var(--mono); font-size:.68rem; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); align-self:center; }
+  .metatab dd { margin:0; font-weight:500; }
+  .fill-token { color:var(--accent); background:var(--accent-soft); padding:.05em .45em; border-radius:3px; font-family:var(--mono); font-size:.82em; }
+
+  /* ---- lifecycle rail ---- */
+  .rail { display:flex; align-items:flex-start; gap:0; overflow-x:auto; padding-bottom:.4em; }
+  .rail .node { flex:1 0 auto; min-width:78px; position:relative; text-align:center; padding-top:22px; }
+  .rail .node::before { content:""; position:absolute; top:7px; left:0; right:0; height:2px; background:var(--border); }
+  .rail .node:first-child::before { left:50%; }
+  .rail .node:last-child::before { right:50%; }
+  .rail .node::after { content:""; position:absolute; top:2px; left:calc(50% - 6px); width:12px; height:12px;
+    border-radius:50%; background:var(--paper); border:2px solid var(--accent); }
+  .rail .node.clockpt::after { border-color:var(--red); background:color-mix(in srgb,var(--red) 18%,var(--paper)); }
+  .rail .node .st { font-size:.72rem; font-weight:600; color:var(--ink); line-height:1.15; display:block; }
+  .rail .node .ss { font-family:var(--mono); font-size:.6rem; color:var(--saffron); }
+
+  .riskgrid { display:grid; grid-template-columns:1fr 1fr; gap:0; border:1px solid var(--border); border-radius:6px; overflow:hidden; }
+  .riskgrid > div { padding:.6em .8em; border-bottom:1px solid var(--hair); font-size:.86rem; line-height:1.35; }
+  .riskgrid .h { background:var(--panel); font-family:var(--mono); font-size:.66rem; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); font-weight:600; }
+  .riskgrid > div:nth-child(2n){ border-left:1px solid var(--hair); }
+  .riskgrid > div:nth-last-child(-n+2){ border-bottom:none; }
+  .riskgrid .risk { color:var(--ink); }
+  .riskgrid .mit { color:var(--muted); }
+
+  .refs { columns:2; column-gap:2.4em; font-size:.82rem; line-height:1.5; color:var(--muted); }
+  .refs li { break-inside:avoid; margin-bottom:.5em; }
+  .refs { list-style:none; padding:0; margin:0; }
+  .refs li { padding-left:1em; text-indent:-1em; }
+  .refs cite { font-style:normal; color:var(--ink); font-weight:500; }
+
+  .three { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }
+  .diff { border:1px solid var(--border); border-radius:6px; padding:.9em 1em; background:var(--panel); }
+  .diff h4 { margin:0 0 .3em; font-family:var(--mono); font-size:.7rem; letter-spacing:.08em; text-transform:uppercase; color:var(--accent); font-weight:600; }
+  .diff p { font-size:.86rem; color:var(--muted); line-height:1.4; }
+
+  .hashribbon { font-family:var(--mono); font-size:.6rem; color:var(--faint); letter-spacing:.02em;
+    position:absolute; bottom:10px; left:clamp(20px,3.4vw,46px); right:clamp(20px,3.4vw,46px);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; opacity:.7; }
+
+  .stamp { position:absolute; bottom:12px; right:clamp(20px,3.4vw,46px); font-family:var(--mono);
+    font-size:.62rem; color:var(--faint); letter-spacing:.06em; }
+
+  /* ---- nav ---- */
+  .bar { display:flex; align-items:center; gap:16px; justify-content:center; padding:12px 16px 22px; }
+  .navbtn { font-family:var(--mono); font-size:.78rem; font-weight:600; color:var(--ink); background:var(--paper);
+    border:1px solid var(--border); border-radius:6px; padding:.5em .9em; cursor:pointer; box-shadow:var(--shadow);
+    display:inline-flex; align-items:center; gap:.5em; }
+  .navbtn:hover { border-color:var(--accent); color:var(--accent); }
+  .navbtn:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  .dots { display:flex; gap:8px; }
+  .dot-nav { width:9px; height:9px; border-radius:50%; border:1px solid var(--border); background:transparent; cursor:pointer; padding:0; }
+  .dot-nav[aria-current="true"] { background:var(--accent); border-color:var(--accent); }
+  .counter { font-family:var(--mono); font-size:.78rem; color:var(--muted); min-width:3.4em; text-align:center; }
+  .themebtn { position:fixed; top:14px; right:14px; z-index:20; }
+
+  @media print {
+    body { background:#fff; }
+    .bar,.themebtn { display:none; }
+    .stage { display:block; padding:0; }
+    .slide { display:grid !important; page-break-after:always; box-shadow:none; border-radius:0;
+      width:100%; aspect-ratio:16/9; margin:0; }
+  }
+  @media (prefers-reduced-motion:reduce){ .gauge .fill { transition:none; } }
+</style>
+
+<button class="navbtn themebtn" id="themebtn" aria-label="Toggle theme">◐ Theme</button>
+
+<div class="deck">
+  <div class="stage" id="stage">
+
+    <!-- SLIDE 1 · TITLE -->
+    <section class="slide active" aria-label="Slide 1: Title">
+      <div class="grid2 title-slide">
+        <div class="stack">
+          <div class="eyebrow"><span>Smart India Hackathon 2026</span><span class="sn">· PS SIH26016 · Software</span></div>
+          <div class="word">
+            <span class="en">BhuArjan</span>
+            <span class="hi">भू-अर्जन</span>
+          </div>
+          <p class="lead">A national system of record for land acquisition — every stage, every statutory clock, every rupee, every affected family. Department of Land Resources, Ministry of Rural Development.</p>
+          <dl class="metatab">
+            <dt>PS ID</dt><dd>SIH26016</dd>
+            <dt>Category</dt><dd>Software</dd>
+            <dt>Team</dt><dd><span class="fill-token">[TEAM NAME]</span> · <span class="fill-token">[TEAM ID]</span></dd>
+          </dl>
+        </div>
+        <div class="clockwrap">
+          <div class="gauge">
+            <svg viewBox="0 0 120 120" aria-hidden="true">
+              <circle class="track" cx="60" cy="60" r="52"></circle>
+              <circle class="fill" id="g1" cx="60" cy="60" r="52"></circle>
+            </svg>
+            <div class="center">
+              <span class="pct">90%</span>
+              <span class="lab">Award clock</span>
+            </div>
+          </div>
+          <span class="chip red"><span class="dot"></span>s.25 · proceedings lapse in 36 days</span>
+          <p class="kicker" style="text-align:center;max-width:26ch">A legal deadline, made a live object</p>
+        </div>
+      </div>
+      <div class="hashribbon">ledger&nbsp;·&nbsp;seq 419&nbsp;·&nbsp;prev b7a1…&nbsp;·&nbsp;hash 9f2c34e1a0…&nbsp;·&nbsp;append-only&nbsp;·&nbsp;SHA-256</div>
+    </section>
+
+    <!-- SLIDE 2 · PROPOSED SOLUTION -->
+    <section class="slide" aria-label="Slide 2: Proposed Solution">
+      <div class="grid2">
+        <div class="stack">
+          <div class="eyebrow"><span>Proposed Solution</span><span class="sn">· 02</span></div>
+          <h2 style="font-size:clamp(1.4rem,2.4vw,2rem)">The document is the event; the clock is the section.</h2>
+          <ul class="pts">
+            <li>Digitises the full lifecycle — proposal → SIA → notification → objections → declaration → award → compensation → possession → R&amp;R — under <b>RFCTLARR 2013</b> and the Fourth Schedule acts as configurable rule-sets.</li>
+            <li><b>Documents are the events:</b> officers upload the gazette, award or payment; the system extracts the fields, the officer confirms, the ledger commits.</li>
+            <li>Statutory clocks are first-class objects with alerts and consequences <span class="sec">s.19(7)</span> <span class="sec">s.25</span> <span class="sec">s.38</span> <span class="sec">s.30(3)</span>.</li>
+            <li>National → state → district → project dashboards computed from the ledger, so every figure traces to a document.</li>
+            <li><b>Beyond Bhoomi Rashi:</b> all statutes, all requiring bodies, plus family-level R&amp;R and a hash-chained ledger it does not have.</li>
+          </ul>
+        </div>
+        <figure class="shot">
+          <img src="__SLIDE2_IMG__" alt="BhuArjan case page: statutory clock panel with the 3D declaration clock red at 93 percent, statutory timeline, append-only ledger with event hashes, and the parcel map.">
+          <figcaption>Running prototype — case page: clocks, timeline, hash-chained ledger, parcels</figcaption>
+        </figure>
+      </div>
+      <div class="stamp">Screenshot of the running system · localhost</div>
+    </section>
+
+    <!-- SLIDE 3 · TECHNICAL APPROACH -->
+    <section class="slide" aria-label="Slide 3: Technical Approach">
+      <div class="stack" style="height:100%; justify-content:center; gap:1.3em">
+        <div class="eyebrow"><span>Technical Approach</span><span class="sn">· 03</span></div>
+        <h2 style="font-size:clamp(1.4rem,2.3vw,1.9rem)">Rule-sets as data. One event ledger. Adapters behind stable interfaces.</h2>
+
+        <div class="rail" role="list" aria-label="Acquisition lifecycle">
+          <div class="node" role="listitem"><span class="st">SIA</span><span class="ss">s.4–8</span></div>
+          <div class="node clockpt" role="listitem"><span class="st">Notification</span><span class="ss">s.11 / 3A</span></div>
+          <div class="node" role="listitem"><span class="st">Objections</span><span class="ss">s.15</span></div>
+          <div class="node clockpt" role="listitem"><span class="st">Declaration</span><span class="ss">s.19 / 3D</span></div>
+          <div class="node clockpt" role="listitem"><span class="st">Award</span><span class="ss">s.23 / 3G</span></div>
+          <div class="node" role="listitem"><span class="st">Compensation</span><span class="ss">s.26–30</span></div>
+          <div class="node clockpt" role="listitem"><span class="st">Possession</span><span class="ss">s.38</span></div>
+          <div class="node" role="listitem"><span class="st">R&amp;R</span><span class="ss">s.31</span></div>
+          <div class="node" role="listitem"><span class="st">Closure</span><span class="ss">s.101</span></div>
+        </div>
+        <p class="kicker">● red nodes are statutory clocks with breach consequences</p>
+
+        <div class="grid-r" style="height:auto">
+          <div class="stack" style="gap:.4em">
+            <p class="kicker">Stack — mirrors the PS's suggested tooling</p>
+            <ul class="pts">
+              <li>PostgreSQL + <b>PostGIS</b> · Leaflet · REST (OpenAPI 3.1)</li>
+              <li>FastAPI (Python) · React + TypeScript · MinIO documents</li>
+              <li>LLM field extraction with <b>regex fallback</b> for gazette formats</li>
+              <li>Docker · MeghRaj-deployable · Keycloak-compatible JWT/RBAC</li>
+            </ul>
+          </div>
+          <div class="stack" style="gap:.4em">
+            <p class="kicker">Methodology</p>
+            <ul class="pts">
+              <li>Rule-sets as versioned <b>YAML</b>: stages, clocks, extensions, consequences — per statute and state</li>
+              <li>Event ledger → projections → dashboards; nightly clock evaluation + escalation</li>
+              <li>Adapters (mock, honest): ULPIN · PFMS · e-Gazette · DigiLocker · Gati Shakti</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <div class="stamp">QR → <span class="fill-token" style="font-size:.9em">[VIDEO LINK]</span> · <span class="fill-token" style="font-size:.9em">[REPO LINK]</span></div>
+    </section>
+
+    <!-- SLIDE 4 · FEASIBILITY -->
+    <section class="slide" aria-label="Slide 4: Feasibility and Viability">
+      <div class="grid2">
+        <div class="stack">
+          <div class="eyebrow"><span>Feasibility &amp; Viability</span><span class="sn">· 04</span></div>
+          <h2 style="font-size:clamp(1.4rem,2.3vw,1.9rem)">Public rules. Public data. NIC-hostable stack.</h2>
+          <ul class="pts">
+            <li>Rules are public — the Act and the 2014 Rules; data is public — e-Gazette notifications and Bhoomi Rashi project pages.</li>
+            <li>Working prototype: one real NH project walked from the <b>3A notification to award</b>, clocks running, audit trail intact.</li>
+            <li>Stack is open source and already what NIC hosts on MeghRaj.</li>
+          </ul>
+        </div>
+        <div class="stack">
+          <p class="kicker">Challenge → strategy</p>
+          <div class="riskgrid">
+            <div class="h">Risk</div><div class="h">Mitigation</div>
+            <div class="risk">State process variation</div><div class="mit">Rule-set overlays per state, versioned — shown as a config diff</div>
+            <div class="risk">Officer data-entry burden</div><div class="mit">Document-first ingestion: upload &amp; confirm, not typing</div>
+            <div class="risk">Government APIs unavailable</div><div class="mit">Adapter layer, mock connectors behind real interfaces</div>
+            <div class="risk">DPDP Act 2023 / family PII</div><div class="mit">Field-level encryption, audited reads, public page without names</div>
+            <div class="risk">Adoption</div><div class="mit">Bhoomi Rashi precedent — mandatory for all NH from 1 Apr 2018</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 5 · IMPACT -->
+    <section class="slide" aria-label="Slide 5: Impact and Benefits">
+      <div class="grid2">
+        <figure class="shot">
+          <img src="__SLIDE5_IMG__" alt="BhuArjan national dashboard: KPI tiles for area notified and acquired, compensation assessed versus paid, affected families, timeline adherence, with assessed-vs-paid and stage-funnel charts.">
+          <figcaption>Running prototype — national dashboard, every tile traceable to events</figcaption>
+        </figure>
+        <div class="stack">
+          <div class="eyebrow"><span>Impact &amp; Benefits</span><span class="sn">· 05</span></div>
+          <ul class="pts">
+            <li><b>Time —</b> digitising NH acquisition raised notifications from ~1,000/yr to <b>2,842</b> in year one; BhuArjan extends that to every statute and sector.</li>
+            <li><b>Money —</b> every month of delayed compensation accrues <span class="sec">12% · s.30(3)</span>; a missed <span class="sec">s.25</span> deadline restarts acquisition from zero. Clocks with escalation stop both.</li>
+            <li><b>Transparency —</b> family-level R&amp;R visible to the Commissioner and Ministry; public parcel status for citizens.</li>
+            <li><b>Governance —</b> a national real-time view replacing quarterly paper returns.</li>
+            <li><b>Social —</b> entitlements tracked to delivery; SC/ST and Scheduled-Area provisions <span class="sec">ss.41–42</span> modelled explicitly.</li>
+          </ul>
+        </div>
+      </div>
+      <div class="stamp">Audience: DoLR · state revenue · Collectors &amp; LAOs · requiring bodies · families</div>
+    </section>
+
+    <!-- SLIDE 6 · REFERENCES -->
+    <section class="slide" aria-label="Slide 6: Research and References">
+      <div class="stack" style="height:100%; justify-content:center; gap:1.1em">
+        <div class="eyebrow"><span>Research &amp; References</span><span class="sn">· 06</span></div>
+        <div class="three">
+          <div class="diff"><h4>Statute-encoded</h4><p>Clocks are sections: s.19(7) rescission, s.25 lapse, s.38 possession gate, s.30(3) interest.</p></div>
+          <div class="diff"><h4>Documents are events</h4><p>Upload, extract, confirm, commit. Every figure traces to a document and a hash.</p></div>
+          <div class="diff"><h4>Beyond Bhoomi Rashi</h4><p>All statutes and bodies, plus R&amp;R at family level and a tamper-evident ledger.</p></div>
+        </div>
+        <ul class="refs">
+          <li><cite>RFCTLARR Act, 2013</cite> &amp; RFCTLARR Rules, 2014 (India Code)</li>
+          <li><cite>National Highways Act, 1956</cite>, ss.3A–3J</li>
+          <li><cite>Bhoomi Rashi</cite> portal (MoRTH) — PIB adoption &amp; throughput releases</li>
+          <li><cite>DoLR</cite> — DILRMP, ULPIN (Bhu-Aadhaar) documentation</li>
+          <li><cite>MoSPI</cite> — Infrastructure &amp; Project Monitoring, land-acquisition delays</li>
+          <li><cite>e-Gazette of India</cite> (egazette.gov.in) — seeded notifications</li>
+          <li><cite>DPDP Act, 2023</cite> · MeitY standards · MeghRaj · GIGW 3.0</li>
+        </ul>
+        <p class="kicker">Prototype <span class="fill-token">[REPO LINK]</span> · demo video <span class="fill-token">[VIDEO LINK]</span></p>
+      </div>
+    </section>
+
+  </div>
+
+  <nav class="bar" aria-label="Slide navigation">
+    <button class="navbtn" id="prev">← Prev</button>
+    <div class="dots" id="dots" role="tablist"></div>
+    <span class="counter" id="counter">1 / 6</span>
+    <button class="navbtn" id="next">Next →</button>
+  </nav>
+</div>
+
+<script>
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const dots = document.getElementById('dots');
+  const counter = document.getElementById('counter');
+  let i = 0;
+  slides.forEach((_, n) => {
+    const b = document.createElement('button');
+    b.className = 'dot-nav'; b.type = 'button';
+    b.setAttribute('role','tab'); b.setAttribute('aria-label', 'Slide ' + (n+1));
+    b.addEventListener('click', () => go(n));
+    dots.appendChild(b);
+  });
+  const dotEls = Array.from(dots.children);
+  function go(n) {
+    i = (n + slides.length) % slides.length;
+    slides.forEach((s, k) => s.classList.toggle('active', k === i));
+    dotEls.forEach((d, k) => d.setAttribute('aria-current', k === i ? 'true' : 'false'));
+    counter.textContent = (i + 1) + ' / ' + slides.length;
+    if (i === 0) armGauge();
+  }
+  document.getElementById('prev').addEventListener('click', () => go(i - 1));
+  document.getElementById('next').addEventListener('click', () => go(i + 1));
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === 'PageDown') go(i + 1);
+    else if (e.key === 'ArrowLeft' || e.key === 'PageUp') go(i - 1);
+  });
+
+  // gauge: 90% of the circle
+  const g = document.getElementById('g1');
+  const R = 52, C = 2 * Math.PI * R;
+  g.style.strokeDasharray = C;
+  const reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
+  function armGauge() {
+    g.style.strokeDashoffset = reduce ? C * 0.10 : C;
+    if (!reduce) requestAnimationFrame(() => requestAnimationFrame(() => { g.style.strokeDashoffset = C * 0.10; }));
+  }
+  armGauge();
+
+  // theme toggle: cycle system → light → dark
+  const root = document.documentElement, tb = document.getElementById('themebtn');
+  let mode = 'system';
+  tb.addEventListener('click', () => {
+    mode = mode === 'system' ? 'light' : mode === 'light' ? 'dark' : 'system';
+    if (mode === 'system') root.removeAttribute('data-theme');
+    else root.setAttribute('data-theme', mode);
+    tb.textContent = mode === 'system' ? '◐ Theme' : mode === 'light' ? '☀ Light' : '☾ Dark';
+  });
+</script>
