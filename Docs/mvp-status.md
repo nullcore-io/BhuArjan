@@ -27,23 +27,35 @@ night of the build; the criticals and highs were fixed the same night with regre
 tests. Its full report: session task output `wt3x1d7z4` (see git history for the fix
 commit).
 
-## Known deferrals (post-MVP; ordered by likely judge interest)
+## Stage 2 (2026-09-02) — delivered
+
+R&R families module (F), integration adapters (J), report exports, district
+dashboards, admin rule-set diff viewer + Maharashtra overlay, and the four deferred
+statutory fixes. Test harness now runs in its own database (`bhuarjan_test`) with a
+per-process schema — five parallel lanes had been dropping each other's shared
+schema and silently writing into the demo data. 134 backend tests.
+
+## Known deferrals (ordered by likely judge interest)
 
 | Area | State | Note |
 |---|---|---|
-| Back-dated event rewinds clock projection | Deferred | Recording a payment with a past `occurred_at` re-evaluates clocks as of that date until the next sweep/read corrects it. Clamp planned. |
-| Un-lapse / reinstatement flow | Partial | `EVENT_REVERSED` is appendable everywhere (audit-visible correction marker) but does not itself restore a stage; a wrongly-lapsed case needs a rebuild story. |
-| R&R module (families, Second Schedule heads) | Not built | MVP column says "—" (final-product.md §5F). Tables exist; `families_affected` KPI reads 0. |
+| Back-dated event rewinds clock projection | Done | Evaluation date is clamped to the case's frontier (`events/service.py::_evaluation_date`); a late-recorded payment cannot un-breach a clock. |
+| Un-lapse / reinstatement flow | Partial | `EVENT_REVERSED` is Collector-level, must name an event of the same case, and unwinds money projections (payment/assessment); it does not restore a stage, and compensation lines are not unwound alongside (`compensation/service.py`). |
+| R&R module (families, Second Schedule heads) | Done | Second/Third Schedule heads as data; enumeration + per-head delivery on the ledger; PII AES-GCM, masked by default, unlocked for Collector/Admin R&R with a purpose, every read audited. 9 families seeded. Case-page R&R tab with purpose dialog. Known coarse model: RR_MONETARY_6M closes on the first delivery to any family (per-family clocks later). |
 | Hindi i18n on case screens | Wiring only | Login/public/dashboard carry bilingual labels; case page + wizard are English. i18next is set up. |
 | UI role gating | Done (core) | Record = LAO/Collector/State; Extend = Collector/State; no-document path = Collector-level, enforced server-side too (rules.md C1). Finer per-screen gating remains. |
 | Top-risk table badge | Done | API now sends `level`/`elapsed_pct`; badge shows amber/red honestly. |
-| Reports (POST /reports), district choropleth, admin users/overlay-upload, webhooks | Not built | APIs.md documents the contract. |
+| Reports | Done (csv, geojson) | Synchronous jobs, MinIO-stored, `# as_of_seq=N` header + sha256 `report_hash`; PDF format not built. |
+| District dashboards | Done | `/districts/:district` reuses the national layout (duplicated ~450 lines — factor into a shared view later); `/states/:state` backend exists, no page yet. |
+| Integration adapters (Module J) | Done (mock) | Six adapters behind one interface answering from real tables/ledger/PDFs/MinIO; admin screen shows `mock` honestly; DigiLocker stamps nothing, eSign absent. |
+| Admin rule-set diff | Done | Overlay merge in the loader; MH overlay shipped (illustrative, *(verify)*); `/admin/rulesets/diff` unified diff rendered on the admin page. |
+| District choropleth, admin users/overlay-upload, webhooks, PDF reports | Not built | APIs.md documents the contract. |
 | KML/zipped-SHP parcel import | 422 with message | GeoJSON path works. |
 | OCR for scanned PDFs | Not enabled | Text-layer PDFs extract; scanned → `ocr=true` warning, no proposal. |
 | OSM basemap tiles | Network | Leaflet CSS is bundled; tiles still fetch from OSM. Finale needs an offline tile pack (rules.md A4). |
 | Public rate limit | nginx-level | 60 req/min via `limit_req` in `web/nginx.conf`; API itself unthrottled. |
-| PII encryption plumbing | Schema only | `pii_enc` columns exist; no families seeded, no decrypt path yet (DPDP §C5). |
-| Ruleset version sort | Lexicographic | `2026.9` would outrank `2026.10`; use zero-padded minor versions until fixed. |
+| PII encryption plumbing | Done | `persons_interested.pii_enc` written/read via `app/core/crypto.py`; no PII in ledger payloads (tested). |
+| Ruleset version sort | Done | Natural numeric ordering (`2026.9` < `2026.10`); overlays never become the no-pin default. |
 
 ## Demo-day notes
 

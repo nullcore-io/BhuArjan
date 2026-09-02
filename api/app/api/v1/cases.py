@@ -40,6 +40,16 @@ APPEND_ROLES = {"LAO", "CALA", "COLLECTOR", "STATE_REVENUE", "ADMIN"}
 # s.19(7)/s.25 provisos: an extension is the appropriate Government's to grant.
 EXTENSION_ROLES = {"COLLECTOR", "STATE_REVENUE", "ADMIN"}
 EXTENSION_EVENT = "EXTENSION_GRANTED"
+# Docs/APIs.md §3.4: EVENT_REVERSED is "Collector or above". It is the only way to
+# correct the ledger (Docs/rules.md C1) — including on a case that has already lapsed —
+# so it is not an LAO's to record against their own entries.
+REVERSAL_ROLES = {"COLLECTOR", "STATE_REVENUE", "ADMIN"}
+REVERSAL_EVENT = "EVENT_REVERSED"
+# Event types the append endpoint gates above APPEND_ROLES.
+ELEVATED_APPEND_ROLES = {
+    EXTENSION_EVENT: EXTENSION_ROLES,
+    REVERSAL_EVENT: REVERSAL_ROLES,
+}
 
 RECENT_EVENTS = 20
 DEFAULT_LIMIT = 50
@@ -388,7 +398,7 @@ def append_case_event(
             errors=[{"field": "Idempotency-Key", "message": "missing"}],
         )
 
-    required_roles = EXTENSION_ROLES if event_type == EXTENSION_EVENT else APPEND_ROLES
+    required_roles = ELEVATED_APPEND_ROLES.get(event_type, APPEND_ROLES)
     if not user.has_role(*required_roles):
         raise not_found()
 

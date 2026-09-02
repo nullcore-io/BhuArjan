@@ -1,11 +1,15 @@
-"""Test harness — real PostgreSQL + PostGIS, in a dedicated schema.
+"""Test harness — real PostgreSQL + PostGIS, in a dedicated DATABASE and a per-process schema.
 
 These are not unit tests with a fake database. The clock engine does calendar-month
 arithmetic, the ledger takes a row lock, and the parcels table is PostGIS; a SQLite
 stand-in would prove nothing about any of it. So the suite runs against the same
-server the demo runs on (localhost:5433), inside its own schema `test_b1`, which is
-dropped and recreated at the start of every session. The `public` schema — the demo
-database — is never touched.
+server the demo runs on (localhost:5433) — but in its own database `bhuarjan_test`,
+so the demo database is structurally unreachable from a test, and inside a schema
+named after this process (`t_<pid>`), so concurrent runs cannot drop each other's
+tables. That second point is not theoretical: when five build lanes ran the suite at
+once against one shared schema, each import-time DROP SCHEMA ... CASCADE deleted the
+others' in-flight tables, and their `search_path = test, public` then silently
+resolved every INSERT to the demo data. Hence the separate database.
 
 The schema is created and the environment is pointed at it *before* `app.core.config`
 is imported, because the engine is built from `settings.DATABASE_URL` at import time.
@@ -22,14 +26,30 @@ import pytest
 from sqlalchemy import create_engine, text
 
 API_DIR = Path(__file__).resolve().parents[1]
-TEST_SCHEMA = "test_b1"
-BASE_URL = "postgresql+psycopg://bhuarjan:bhuarjan_dev@localhost:5433/bhuarjan"
+TEST_SCHEMA = os.environ.get("TEST_SCHEMA") or f"t_{os.getpid()}"
+_SERVER = "postgresql+psycopg://bhuarjan:bhuarjan_dev@localhost:5433"
+DEMO_DB_URL = f"{_SERVER}/bhuarjan"           # never used for writes here
+TEST_DB = "bhuarjan_test"
+BASE_URL = f"{_SERVER}/{TEST_DB}"
 SCHEMA_URL = f"{BASE_URL}?options=-csearch_path%3D{TEST_SCHEMA},public"
 
 # --- bootstrap: must run before anything imports app.core.config -------------------
 
+# 1. The test database (with PostGIS) — created once, kept. CREATE DATABASE cannot run
+#    inside a transaction, hence AUTOCOMMIT on the maintenance connection.
+_admin = create_engine(DEMO_DB_URL, isolation_level="AUTOCOMMIT")
+with _admin.connect() as _conn:
+    exists = _conn.execute(
+        text("SELECT 1 FROM pg_database WHERE datname = :d"), {"d": TEST_DB}
+    ).scalar()
+    if not exists:
+        _conn.execute(text(f"CREATE DATABASE {TEST_DB}"))
+_admin.dispose()
+
+# 2. This process's own schema inside it.
 _boot = create_engine(BASE_URL)
 with _boot.begin() as _conn:
+    _conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis"))
     _conn.execute(text(f"DROP SCHEMA IF EXISTS {TEST_SCHEMA} CASCADE"))
     _conn.execute(text(f"CREATE SCHEMA {TEST_SCHEMA}"))
 _boot.dispose()
@@ -57,6 +77,7 @@ TEST_PASSWORD = "test-pass"
 @pytest.fixture(scope="session", autouse=True)
 def schema():
     assert str(engine.url).find(TEST_SCHEMA) >= 0, "tests must not run on the demo schema"
+    assert engine.url.database == TEST_DB, "tests must not run against the demo database"
 
     # `checkfirst=True` would ask "does `events` exist?", the search_path would answer
     # yes from `public` (the demo database), and every table would be skipped — leaving

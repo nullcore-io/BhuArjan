@@ -26,6 +26,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import DistrictsCard from '../../components/ui/DistrictsCard'
 import Drawer from '../../components/ui/Drawer'
 import { Empty, ErrorNote, Loading, Panel } from '../../components/ui/Feedback'
 import KpiTile from '../../components/ui/KpiTile'
@@ -689,6 +690,9 @@ export default function NationalDashboard() {
                 </div>
               )}
             </Panel>
+
+            {/* Drill-down: each district re-computes its own figures server-side. */}
+            <DistrictsCard rows={riskRows} />
           </div>
         </>
       ) : null}

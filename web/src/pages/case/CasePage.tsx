@@ -21,6 +21,7 @@ import DocumentsPanel from '../../components/case/DocumentsPanel'
 import IntegrityBadge, { IntegrityChip } from '../../components/case/IntegrityBadge'
 import Ledger from '../../components/case/Ledger'
 import ParcelMap from '../../components/case/ParcelMap'
+import RRTab from '../../components/case/RRTab'
 import StatutoryTimeline from '../../components/case/StatutoryTimeline'
 import {
   CaseAlert,
@@ -40,8 +41,16 @@ import {
   titleize,
 } from '../../components/case/caseApi'
 
-const TABS = ['compensation', 'alerts', 'integrity'] as const
+const TABS = ['compensation', 'rr', 'alerts', 'integrity'] as const
 type Tab = (typeof TABS)[number]
+
+/** `capitalize` cannot make "R&R" out of a tab id, so the labels are explicit. */
+const TAB_LABEL: Record<Tab, string> = {
+  compensation: 'Compensation',
+  rr: 'R&R',
+  alerts: 'Alerts',
+  integrity: 'Integrity',
+}
 
 const STAGE_TONE: Record<string, string> = {
   LAPSED: 'bg-breached text-white border border-breached',
@@ -304,7 +313,7 @@ export default function CasePage() {
                 if (e.key === 'ArrowLeft') setTab(TABS[(i - 1 + TABS.length) % TABS.length])
               }}
             >
-              {t}
+              {TAB_LABEL[t]}
               {t === 'alerts' && caseAlerts.length ? (
                 <span className="ml-1 rounded bg-red px-1.5 text-xs text-white">
                   {caseAlerts.length}
@@ -317,6 +326,8 @@ export default function CasePage() {
         <div id={`panel-${tab}`} role="tabpanel" aria-labelledby={`tab-${tab}`} className="pt-3">
           {tab === 'compensation' ? (
             <CompensationTab data={compQ.data} loading={compQ.isLoading} error={compQ.error} />
+          ) : tab === 'rr' ? (
+            <RRTab caseId={id} stage={stage} />
           ) : tab === 'alerts' ? (
             <AlertsTab alerts={caseAlerts} loading={alertsQ.isLoading} error={alertsQ.error} />
           ) : (

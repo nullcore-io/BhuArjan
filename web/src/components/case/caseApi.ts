@@ -127,6 +127,101 @@ export interface CompensationSummary {
   interest_accrued?: number | string | null
 }
 
+/* ------------------------------------------------------------------ R&R ---- */
+
+/**
+ * One Second/Third Schedule head on one family.
+ *
+ * The server writes only `due` and `delivered` (api/app/domain/rr/schedules.py:
+ * "an entitlement an officer decides does not apply is a determination that belongs
+ * in the ledger, not a silent third state"). `overdue` is a *view* the R&R tab
+ * derives from the s.38(1) R&R clocks — it is typed here because the field is read
+ * tolerantly if a later build starts sending it.
+ */
+export interface EntitlementCell {
+  status?: string | null
+  delivered_on?: string | null
+  evidence_document_id?: string | null
+}
+
+/** One row of `GET /cases/{id}/families`. Names appear only under `head`, and only
+ *  when the caller had both a permitted role and a stated purpose (Docs/rules.md C5). */
+export interface Family {
+  id: string
+  case_id?: string | null
+  /** Masked reference — initials, safe to print. Always present. */
+  ref?: string | null
+  category?: string | null
+  displaced?: boolean | null
+  sc_st?: boolean | null
+  enumerated_on?: string | null
+  synthetic?: boolean | null
+  /** "masked" | "unlocked" — the server's own word for what it sent. */
+  pii?: string | null
+  /** Decrypted head-of-family fields; present only on an unlocked (audited) read. */
+  head?: Record<string, unknown> | null
+  /** `{head_id: cell}`. `rr_entitlements` is accepted as an alias. */
+  entitlements?: Record<string, EntitlementCell> | EntitlementCell[] | null
+  rr_entitlements?: Record<string, EntitlementCell> | EntitlementCell[] | null
+  heads_total?: number | null
+  heads_delivered?: number | null
+  heads_due?: number | null
+  delivered_pct?: number | null
+}
+
+/** GET /cases/{id}/families → masked register (+ `masked_reason` when it is masked). */
+export interface FamilyPage {
+  items?: Family[] | null
+  families?: Family[] | null
+  total?: number | null
+  next_cursor?: string | null
+  pii?: string | null
+  purpose?: string | null
+  masked_reason?: string | null
+  case_id?: string | null
+  case_no?: string | null
+}
+
+/** One head in `GET /cases/{id}/rr/summary`. Counts arrive nested under `counts`;
+ *  flat `due`/`delivered`/`overdue` are read too, so either shape renders. */
+export interface RRHead {
+  head: string
+  label?: string | null
+  kind?: string | null
+  basis?: string | null
+  amount?: string | null
+  applies_to?: string | null
+  counts?: { due?: number | null; delivered?: number | null; overdue?: number | null } | null
+  due?: number | null
+  delivered?: number | null
+  overdue?: number | null
+  families?: number | null
+  delivered_pct?: number | null
+}
+
+/** GET /cases/{id}/rr/summary */
+export interface RRSummary {
+  case_id?: string | null
+  case_no?: string | null
+  families?: { total?: number | null; displaced?: number | null; sc_st?: number | null } | null
+  heads?: RRHead[] | null
+  status_counts?: { due?: number | null; delivered?: number | null } | null
+  rr_progress_pct?: number | null
+  /** The s.38(1) R&R clocks — same shape as every other clock on the case. */
+  clocks?: Clock[] | null
+  as_of_seq?: number | null
+  as_of_date?: string | null
+  schedule_note?: string | null
+}
+
+/** POST /families/{id}/entitlements/{head}/deliver → 200 */
+export interface DeliveryResult {
+  family?: Family | null
+  head?: (RRHead & EntitlementCell) | null
+  seq?: number | null
+  stage?: string | null
+}
+
 /** GET /alerts */
 export interface CaseAlert {
   id: string

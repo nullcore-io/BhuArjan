@@ -27,6 +27,7 @@ from app.models import (
     Clock,
     CompensationLine,
     Event,
+    OrgUnit,
     Parcel,
     Project,
 )
@@ -307,9 +308,10 @@ def top_risk_cases(
 ) -> list[dict]:
     """Open clocks nearest their due date — the queue an officer actually works."""
     q = (
-        select(Clock, Case, Project)
+        select(Clock, Case, Project, OrgUnit)
         .join(Case, Case.id == Clock.case_id)
         .join(Project, Project.id == Case.project_id)
+        .outerjoin(OrgUnit, OrgUnit.id == Case.district_id)
         .where(Clock.status.in_(("running", "extended", "breached")))
         .where(Clock.due_date.isnot(None))
     )
@@ -317,7 +319,7 @@ def top_risk_cases(
         _scoped(q, case_ids, Clock.case_id).order_by(Clock.due_date.asc()).limit(limit)
     ).all()
     out = []
-    for clock, case, project in rows:
+    for clock, case, project, district in rows:
         days_left = (clock.due_date - today).days if clock.due_date else None
         elapsed_pct = None
         if clock.start_date and clock.due_date and clock.due_date > clock.start_date:
@@ -341,6 +343,8 @@ def top_risk_cases(
             "case_no": case.case_no,
             "project": project.name,
             "statute_track": case.statute_track,
+            "district": district.name if district is not None else None,
+            "district_id": str(district.id) if district is not None else None,
             "clock_id": clock.clock_id,
             "basis": clock.basis,
             "consequence": clock.consequence,

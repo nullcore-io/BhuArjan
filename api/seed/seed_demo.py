@@ -5,15 +5,17 @@ Designed against today ≈ 2026-09-02:
   Case 1 LAQ/SEO/2025/01 (NH): 3A on 2025-09-27 → 3D clock due 2026-09-27 → ~93% elapsed, RED.
       The live demo uploads the 3D declaration PDF (seed/demo_uploads/) and closes the clock.
   Case 2 LAQ/SEO/2024/07 (NH): full lifecycle to possession — populates dashboards/compensation.
+      4 affected families (2 displaced); Second Schedule heads mostly delivered after possession.
   Case 3 LAQ/BLG/2025/03 (RFCTLARR): s.11 2025-10-20 → s.19 clock ~87%, AMBER; preconditions
       (R&R published, cost deposited) already met so s.19 can be recorded live.
+      5 affected families (3 displaced), every entitlement still due — there is no award yet.
 
 Idempotent: seed_if_empty() no-ops when projects exist.
 """
 
 import logging
 import uuid
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 log = logging.getLogger(__name__)
@@ -94,6 +96,58 @@ def _append(db, case, actor, type_, occurred, payload=None, document_id=None):
     )
 
 
+def _seed_families(db, case, actor, specs):
+    """Enumerate synthetic affected families (module F, Docs/APIs.md §3.8).
+
+    Names are invented; the villages are real (Docs/rules.md A5: "use synthetic names on
+    real geography if needed, and say so"). Every record is flagged `synthetic` both in
+    the ledger payload and in the family's consent flags, and no real identifier is used
+    — the ID and bank references are the last four characters only, by construction.
+
+    Placement in the walk-up is not decorative. `FAMILY_ENUMERATED` is on the `NOTIFIED`
+    and `DECLARED` stage lists of the rule-sets, not on `AWARDED`/`POSSESSED`, so the
+    census is recorded where the Act actually takes it — with the R&R scheme, before the
+    award — and the ledger refuses it anywhere else.
+    """
+    from app.domain.rr.service import enumerate_family
+
+    families = []
+    for spec in specs:
+        enrolled = enumerate_family(
+            db,
+            case,
+            actor.id,
+            head=spec["head"],
+            category=spec.get("category"),
+            displaced=spec.get("displaced", False),
+            sc_st=spec.get("sc_st", False),
+            occurred_at=spec["on"],
+            idempotency_key=f"seed:{case.id}:FAMILY_ENUMERATED:{spec['head']['name']}",
+            synthetic=True,
+        )
+        families.append(enrolled.family)
+    return families
+
+
+def _seed_deliveries(db, case, actor, family, heads, start: date, every_days: int = 9):
+    """Record Second/Third Schedule heads as delivered, one event each."""
+    from app.domain.rr.service import deliver_entitlement
+
+    when = start
+    for head in heads:
+        deliver_entitlement(
+            db,
+            case,
+            family,
+            head,
+            actor.id,
+            delivered_on=when,
+            idempotency_key=f"seed:{case.id}:{family.id}:{head}",
+            synthetic=True,
+        )
+        when = when + timedelta(days=every_days)
+
+
 def _try_upload_pdf(db, case, actor, kind, pdf_path: Path):
     """Store a generated gazette PDF as a case document. Returns document id or None."""
     try:
@@ -162,8 +216,14 @@ def seed() -> None:
         try:
             from seed.make_gazette_pdfs import make_3a_pdf, make_3d_pdf
 
-            pdf_3a = make_3a_pdf(uploads / "gazette_3A_LAQ-SEO-2025-01.pdf")
-            pdf_3d = make_3d_pdf(uploads / "gazette_3D_LAQ-SEO-2025-01.pdf")
+            pdf_3a = uploads / "gazette_3A_LAQ-SEO-2025-01.pdf"
+            pdf_3d = uploads / "gazette_3D_LAQ-SEO-2025-01.pdf"
+            # Regenerate only when missing: the committed PDFs are the demo's known
+            # inputs and reportlab would otherwise churn their bytes on every boot.
+            if not pdf_3a.exists():
+                pdf_3a = make_3a_pdf(pdf_3a)
+            if not pdf_3d.exists():
+                pdf_3d = make_3d_pdf(pdf_3d)
         except Exception:
             log.exception("seed: gazette PDF generation unavailable")
 
@@ -211,6 +271,28 @@ def seed() -> None:
         ])
         _append(db, case2, lao, "DECLARATION_3D", date(2025, 2, 10),
                 {"gazette_no": "S.O. 655(E)", "total_area_ha": "12.9000"})
+
+        # R&R census (module F). Recorded in the DECLARED window, where the rule-set
+        # permits enumeration; the entitlements are delivered after possession, below.
+        families2 = _seed_families(db, case2, lao, [
+            {"head": {"name": "Ramesh Prasad Yadav", "guardian": "Shivlal Yadav",
+                      "id_ref_last4": "4417", "bank_ref_last4": "9032", "village": "Kahani"},
+             "category": "agricultural landowner", "displaced": True, "sc_st": False,
+             "on": date(2025, 6, 9)},
+            {"head": {"name": "Sunita Bai Uikey", "guardian": "Ratanlal Uikey",
+                      "id_ref_last4": "7781", "bank_ref_last4": "2264", "village": "Kahani"},
+             "category": "agricultural landowner", "displaced": True, "sc_st": True,
+             "on": date(2025, 6, 9)},
+            {"head": {"name": "Mohan Lal Sahu", "guardian": "Bhagwandas Sahu",
+                      "id_ref_last4": "1195", "bank_ref_last4": "5518", "village": "Kahani"},
+             "category": "petty shopkeeper", "displaced": False, "sc_st": False,
+             "on": date(2025, 6, 23)},
+            {"head": {"name": "Phoolwati Dhurve", "guardian": "Sukhram Dhurve",
+                      "id_ref_last4": "3620", "bank_ref_last4": "8874", "village": "Kahani"},
+             "category": "agricultural labourer", "displaced": False, "sc_st": True,
+             "on": date(2025, 6, 23)},
+        ])
+
         _append(db, case2, lao, "AWARD_3G", date(2025, 11, 5),
                 {"award_no": "CALA/SEO/2025/19"})
 
@@ -250,6 +332,26 @@ def seed() -> None:
         _append(db, case2, lao, "POSSESSION_3E", date(2026, 2, 20),
                 {"memo_no": "POSS/SEO/2026/04"})
 
+        # R&R delivery after possession — the s.38(1) heads the two displaced families
+        # have actually received. `land_for_land` stays due (this is a highway, not an
+        # irrigation project) and so does whatever the household has not chosen yet, so
+        # the screen shows a real mix rather than a wall of green.
+        _seed_deliveries(db, case2, lao, families2[0], [
+            "house", "subsistence_allowance", "transportation_allowance",
+            "resettlement_allowance", "cattle_shed_grant", "employment",
+            "stamp_duty_exemption", "resettlement_infrastructure",
+        ], date(2026, 3, 5))
+        _seed_deliveries(db, case2, lao, families2[1], [
+            "house", "subsistence_allowance", "transportation_allowance",
+            "resettlement_allowance", "cattle_shed_grant", "employment",
+            "artisan_grant", "stamp_duty_exemption", "resettlement_infrastructure",
+        ], date(2026, 3, 12))
+        _seed_deliveries(db, case2, lao, families2[2],
+                         ["employment", "artisan_grant", "stamp_duty_exemption"],
+                         date(2026, 4, 2))
+        _seed_deliveries(db, case2, lao, families2[3],
+                         ["employment", "stamp_duty_exemption"], date(2026, 4, 16))
+
         # ---------- Case 3: RFCTLARR, s.19 clock amber, preconditions met ----------
         case3 = Case(project_id=tl_project.id, district_id=balaghat.id, case_no="LAQ/BLG/2025/03",
                      statute_track="RFCTLARR_2013", ruleset_version="2026.09")
@@ -267,6 +369,31 @@ def seed() -> None:
             ("Kirnapur", "486201", "77/2", 5.10, 80.310, 21.702, "notified"),
             ("Kirnapur", "486201", "81", 4.30, 80.315, 21.702, "notified"),
         ])
+        # R&R census on the RFCTLARR case: enumerated, nothing delivered yet — the
+        # award has not been made, so no Second Schedule head can be due for delivery.
+        _seed_families(db, case3, lao, [
+            {"head": {"name": "Devilal Marskole", "guardian": "Chhotelal Marskole",
+                      "id_ref_last4": "5093", "bank_ref_last4": "1147", "village": "Kirnapur"},
+             "category": "agricultural landowner", "displaced": True, "sc_st": True,
+             "on": date(2025, 10, 28)},
+            {"head": {"name": "Kamla Bai Bisen", "guardian": "Ganesh Prasad Bisen",
+                      "id_ref_last4": "8812", "bank_ref_last4": "6605", "village": "Kirnapur"},
+             "category": "agricultural landowner", "displaced": True, "sc_st": False,
+             "on": date(2025, 10, 28)},
+            {"head": {"name": "Anil Kumar Turkar", "guardian": "Rameshwar Turkar",
+                      "id_ref_last4": "2340", "bank_ref_last4": "7719", "village": "Kirnapur"},
+             "category": "artisan (carpenter)", "displaced": True, "sc_st": False,
+             "on": date(2025, 11, 18)},
+            {"head": {"name": "Shanti Bai Nagpure", "guardian": "Devraj Nagpure",
+                      "id_ref_last4": "6674", "bank_ref_last4": "3358", "village": "Kirnapur"},
+             "category": "agricultural labourer", "displaced": False, "sc_st": False,
+             "on": date(2025, 11, 18)},
+            {"head": {"name": "Jagdish Prasad Rahangdale", "guardian": "Motiram Rahangdale",
+                      "id_ref_last4": "9021", "bank_ref_last4": "4486", "village": "Kirnapur"},
+             "category": "agricultural landowner", "displaced": False, "sc_st": False,
+             "on": date(2025, 12, 15)},
+        ])
+
         _append(db, case3, lao, "RR_SCHEME_DRAFTED_S16", date(2026, 3, 10), {})
         _append(db, case3, lao, "RR_SCHEME_APPROVED_S17", date(2026, 5, 2), {})
         _append(db, case3, lao, "RR_SCHEME_PUBLISHED_S18", date(2026, 6, 15), {})
@@ -286,4 +413,7 @@ def seed() -> None:
         except Exception:
             log.exception("seed: initial clock evaluation failed")
 
-    log.info("seed: done — 2 projects, 3 cases, 6 users (password %s)", DEMO_PASSWORD)
+    log.info(
+        "seed: done — 2 projects, 3 cases, 9 affected families, 6 users (password %s)",
+        DEMO_PASSWORD,
+    )

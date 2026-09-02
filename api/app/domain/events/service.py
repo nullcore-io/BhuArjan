@@ -17,11 +17,14 @@ validation_error, not a silently discarded statutory event.
 The function flushes but never commits: the caller owns the transaction, so a router
 that also writes parcels or compensation lines gets one atomic unit with the ledger.
 
-Clock-evaluation date. Clocks are evaluated as of `min(today, occurred_at)`. Recording
-something that happened today evaluates at today — the ordinary case. Back-filling
-history (the seed, a scanned gazette from last year) evaluates as of the legal date the
-event carries, so entering a case's past does not trip a breach that the very next
-back-filled event closes. Bringing a case up to the present is the job of the clock
+Clock-evaluation date. Clocks are evaluated as of `min(today, case frontier)`, where the
+frontier is the latest `occurred_at` the case's ledger already carries once this event
+joins it. Recording something that happened today evaluates at today — the ordinary
+case. Back-filling history in order (the seed, a scanned gazette from last year)
+evaluates as of the legal date each event carries, so entering a case's past does not
+trip a breach that the very next back-filled event closes. But a *back-dated* event on a
+case that is already up to date never rewinds the projection to its own legal date:
+see `_evaluation_date`. Bringing a case up to the present is still the job of the clock
 evaluation on read (`GET /cases/{id}/clocks`) and of the hourly scheduler, both of
 which pass a real `today`.
 """
@@ -30,16 +33,20 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.problems import Problem, stale_state
 from app.core.time import ist_today
 from app.domain.events.hash import compute_hash, event_fields, to_hex
-from app.models import Case, CaseState, Event
+from app.models import Case, CaseState, Clock, Event
+
+REVERSAL_EVENT = "EVENT_REVERSED"
+# Clock states that can only have been written by an evaluation past the due date.
+BREACHED_CLOCK_STATUSES = ("breached", "lapsed")
 
 
 @dataclass
@@ -125,6 +132,98 @@ def _replay(
     )
 
 
+def _validate_reversal(db: Session, case: Case, payload: dict) -> None:
+    """EVENT_REVERSED must name an event of *this* case (Docs/APIs.md §3.4).
+
+    A correction is only meaningful against the event it corrects: an unparseable or
+    foreign `reversed_event_id` recorded a permanent, hash-chained marker that points at
+    nothing, and the projection below would silently do nothing with it.
+    """
+    raw = payload.get("reversed_event_id")
+    text = str(raw if raw is not None else "").strip()
+    try:
+        target_id = uuid.UUID(text)
+    except (TypeError, ValueError):
+        raise Problem(
+            "validation_error",
+            "Validation error",
+            422,
+            "EVENT_REVERSED must name the event it corrects in "
+            "payload.reversed_event_id (that event's uuid)",
+            errors=[
+                {
+                    "field": "payload.reversed_event_id",
+                    "message": "missing or not a uuid",
+                    "value": raw,
+                }
+            ],
+        )
+    owner = db.scalar(select(Event.case_id).where(Event.id == target_id))
+    if owner is None or owner != case.id:
+        raise Problem(
+            "validation_error",
+            "Validation error",
+            422,
+            f"event {target_id} is not an event of this case; a correction may only "
+            "reverse an event recorded on the case it is filed against",
+            errors=[
+                {
+                    "field": "payload.reversed_event_id",
+                    "message": "not an event of this case",
+                    "value": str(target_id),
+                }
+            ],
+        )
+
+
+def _evaluation_date(
+    db: Session, case_id: uuid.UUID, event_seq: int, occurred_at: date, today: date
+) -> date:
+    """The date this append evaluates the case's clocks at.
+
+    `min(today, occurred_at)` alone let a back-dated append rewind the whole clock
+    projection. An officer recording today a payment that legally happened fifteen
+    months ago re-evaluated every clock as of that past date: breached clocks flipped
+    back to 'running', the risk score collapsed, and the case dropped out of the breach
+    list and the escalation ladder until the next hourly sweep.
+
+    So the date is clamped to the case's *frontier*: the later of
+
+      - the latest `occurred_at` already in its ledger, ignoring the event being
+        appended, and
+      - a date its own clock rows prove an evaluation has already reached — a row
+        reading 'breached' or 'lapsed' can only have been written by an evaluation past
+        its due date, and every clock of a case is evaluated in one pass, so
+        `max(due_date) + 1` over those rows is a floor the projection demonstrably
+        already stands on. Without it a case carried forward by a *read* rather than by
+        an event — the ordinary way a breach appears on the dashboard — would still
+        rewind, because nothing in its ledger is dated recently.
+
+    Back-filling history in ascending order is unchanged: each back-filled event is
+    itself the frontier, and a clock breached during the back-fill only floors the
+    evaluation at a date the back-fill had already passed. The whole thing is capped at
+    `today`, so a future-dated event never evaluates a case in the future, and moving
+    the demo date backwards still shows the case as of that earlier date.
+    """
+    frontier = db.scalar(
+        select(func.max(Event.occurred_at)).where(
+            Event.case_id == case_id, Event.seq != event_seq
+        )
+    )
+    if frontier is not None and frontier > occurred_at:
+        occurred_at = frontier
+
+    breached_due = db.scalar(
+        select(func.max(Clock.due_date)).where(
+            Clock.case_id == case_id, Clock.status.in_(BREACHED_CLOCK_STATUSES)
+        )
+    )
+    if breached_due is not None and breached_due + timedelta(days=1) > occurred_at:
+        occurred_at = breached_due + timedelta(days=1)
+
+    return min(today, occurred_at)
+
+
 def _is_idempotency_conflict(exc: IntegrityError) -> bool:
     """True when the insert lost the race for a unique Idempotency-Key."""
     orig = getattr(exc, "orig", None)
@@ -205,6 +304,8 @@ def append_event(
         db, case, rs, event_type, stage,
         document_id=document_id, payload=payload, system=system,
     )
+    if event_type == REVERSAL_EVENT:
+        _validate_reversal(db, case, payload)
 
     # --- 5. append to the chain ----------------------------------------------------
     event = Event(
@@ -244,7 +345,8 @@ def append_event(
     # --- 7. clocks ------------------------------------------------------------------
     clocks_changed: list[dict] = []
     if not clock_engine.is_evaluating(case.id):
-        clocks_changed = clock_engine.evaluate(db, case, min(today, occurred_at), rs)
+        as_of = _evaluation_date(db, case.id, event.seq, occurred_at, today)
+        clocks_changed = clock_engine.evaluate(db, case, as_of, rs)
         state = db.get(CaseState, case.id) or state
 
     return AppendResult(

@@ -3,6 +3,7 @@ Cases pin `ruleset_version` at creation; the registry keys on (track, version)."
 
 import logging
 import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -59,6 +60,26 @@ class Ruleset:
 
 
 _REGISTRY: dict[tuple[str, str], Ruleset] = {}
+
+_VERSION_CHUNK = re.compile(r"(\d+)")
+
+
+def version_sort_key(version: str) -> tuple:
+    """Natural order for rule-set versions: `2026.9` sorts *before* `2026.10`.
+
+    The plain string sort this replaced ranked `2026.9` above `2026.10`, so the tenth
+    revision of a track would never become the "whatever is current" answer that project
+    creation lands on — new projects would keep being filed under the older rule-set
+    while the newer one sat in `rulesets/` looking loaded. Digit runs compare
+    numerically; whatever separates them compares as text. Every element is the same
+    3-tuple shape so a version that mixes digits and letters can never raise on
+    comparison.
+    """
+    return tuple(
+        (1, int(chunk), "") if chunk.isdigit() else (0, 0, chunk)
+        for chunk in _VERSION_CHUNK.split(str(version))
+        if chunk
+    )
 
 
 def _stage_on(spec) -> list[str]:
@@ -210,7 +231,8 @@ def get_ruleset(track: str, version: str | None = None) -> Ruleset | None:
     filed under, which is exactly what pinning exists to prevent: a dropped-in
     `rfctlarr_2027.yaml`, or a YAML typo that makes `load_all_rulesets` skip the
     pinned file, would have silently recomputed every clock from new durations.
-    Callers that want "whatever is current" (project creation) pass no version.
+    Callers that want "whatever is current" (project creation) pass no version; "newest"
+    is decided by `version_sort_key`, not by a string sort.
     """
     if not _REGISTRY:
         load_all_rulesets()
@@ -223,7 +245,7 @@ def get_ruleset(track: str, version: str | None = None) -> Ruleset | None:
     ]
     if not candidates:
         return None
-    return sorted(candidates, key=lambda r: r.version)[-1]
+    return sorted(candidates, key=lambda r: version_sort_key(r.version))[-1]
 
 
 def list_rulesets() -> list[Ruleset]:

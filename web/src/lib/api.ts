@@ -67,6 +67,32 @@ export async function api<T = any>(
   return res.json()
 }
 
+/** Text-bodied GET (YAML, unified diffs) with the same auth/demo-date headers and 401 handling as api(). */
+export async function apiText(path: string, init: RequestInit = {}): Promise<string> {
+  const headers: Record<string, string> = { ...(init.headers as Record<string, string> | undefined) }
+  const token = getToken()
+  if (token) headers['Authorization'] = `Bearer ${token}`
+  const demoDate = getDemoDate()
+  if (demoDate) headers['X-Demo-Date'] = demoDate
+  const res = await fetch(`${API_BASE}${path}`, { ...init, headers })
+  if (res.status === 401) {
+    setToken(null)
+    if (!location.pathname.startsWith('/login') && !location.pathname.startsWith('/public')) {
+      location.href = '/login'
+    }
+  }
+  if (!res.ok) {
+    let problem: any = null
+    try {
+      problem = await res.json()
+    } catch {
+      /* non-JSON error body */
+    }
+    throw new ApiError(res.status, problem)
+  }
+  return res.text()
+}
+
 export function uploadForm<T = any>(path: string, form: FormData): Promise<T> {
   return api<T>(path, { method: 'POST', body: form })
 }

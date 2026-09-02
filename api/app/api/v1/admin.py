@@ -1,17 +1,27 @@
 """Admin — Docs/APIs.md §3.12.
 
-GET /admin/rulesets                     -> tracks, versions, stage/clock counts
-GET /admin/rulesets/{track}/{version}   -> the raw YAML, as shipped
-GET /admin/integrations                 -> adapter status; every one of them is `mock`
-GET /admin/audit                        -> the non-domain audit trail
+GET  /admin/rulesets                     -> tracks, versions, overlays, counts
+GET  /admin/rulesets/{track}/{version}   -> the raw YAML, as shipped
+GET  /admin/rulesets/diff?base=&overlay= -> unified diff of the two effective rule-sets
+GET  /admin/integrations                 -> adapter status; every one of them is `mock`
+POST /admin/integrations/{name}/test     -> run that adapter's self-check
+GET  /admin/audit                        -> the non-domain audit trail
 
 The rule-set screen is shown on stage: it is the evidence that the statutory timelines
-are configuration, not code (Docs/rules.md C3). The integrations list says `mock`
-truthfully — Docs/APIs.md §4 is explicit that we say so out loud.
+are configuration, not code (Docs/rules.md C3), and the diff is the evidence that a
+state variation is a config change and not a fork — `s.10A` appears in the Maharashtra
+overlay as an added line, in a diff a reviewer can read.
+
+The integrations list is generated from the live adapter registry
+(`app.domain.integrations`), not from a hand-written table: `mode` is whatever the
+adapter object says it is, so the screen cannot drift into claiming a `live`
+connection that the code does not have. Docs/APIs.md §4 is explicit that we say so
+out loud.
 """
 
 from __future__ import annotations
 
+import difflib
 import uuid
 from datetime import date, datetime, time, timezone
 
@@ -22,73 +32,29 @@ from sqlalchemy.orm import Session
 
 from app.core.db import get_db
 from app.core.deps import CurrentUser, get_current_user
-from app.core.problems import not_found
+from app.core.problems import Problem, not_found
+from app.domain.integrations import get_adapter, list_adapters
 from app.models import AdminAudit, User
 
 router = APIRouter()
 
 AUDIT_ROLES = {"MINISTRY", "AUDITOR", "STATE_REVENUE", "ADMIN", "COLLECTOR"}
-
-# Docs/APIs.md §4. Every adapter is a mock in this build; `live` requires the real
-# endpoint plus credentials, which the offline demo laptop does not have.
-INTEGRATIONS = [
-    {
-        "name": "ulpin",
-        "title": "ULPIN / DILRMP land records",
-        "mode": "mock",
-        "interface": "lookup(ulpin); by_survey(state, district, village, survey_no)",
-        "real_target": "State Bhulekh / DILRMP APIs via ULPIN",
-        "mock_behaviour": "fixture table for the seeded villages",
-    },
-    {
-        "name": "pfms",
-        "title": "PFMS payments",
-        "mode": "mock",
-        "interface": "payment_status(pfms_ref); list_payments(case_ref)",
-        "real_target": "PFMS APIs",
-        "mock_behaviour": "fixture statuses; PAID after 2 minutes in demo",
-    },
-    {
-        "name": "gazette",
-        "title": "e-Gazette notifications",
-        "mode": "mock",
-        "interface": "search(statute, section, from, to, state); fetch(ref)",
-        "real_target": "egazette.gov.in",
-        "mock_behaviour": "local cache of scraped and synthetic PDFs",
-    },
-    {
-        "name": "digilocker",
-        "title": "DigiLocker / eSign",
-        "mode": "mock",
-        "interface": "issue(document_id); esign(document_id, signer)",
-        "real_target": "DigiLocker / eSign (CDAC)",
-        "mock_behaviour": "stamps a watermark",
-    },
-    {
-        "name": "gatishakti",
-        "title": "PM Gati Shakti NMP",
-        "mode": "mock",
-        "interface": "export(project_id)",
-        "real_target": "PM Gati Shakti National Master Plan",
-        "mock_behaviour": "writes GeoJSON to MinIO with a public URL",
-    },
-    {
-        "name": "notify",
-        "title": "Notification gateway",
-        "mode": "mock",
-        "interface": "send(channel, to, template, vars)",
-        "real_target": "DLT-registered SMS, SMTP, push",
-        "mock_behaviour": "console + in-app",
-    },
-]
+# Firing an adapter's self-check is an outbound call, so it is not a read: an
+# AUDITOR, who may see everything and change nothing, is deliberately not here.
+INTEGRATION_TEST_ROLES = {"MINISTRY", "STATE_REVENUE", "ADMIN", "COLLECTOR"}
 
 
 def _ruleset_files() -> list[tuple[str, str, object]]:
-    """(track, version, path) for every YAML in the rule-set directory."""
+    """(track, version, path) for every YAML in the rule-set directory.
+
+    `rglob`, not `glob`: overlays live in `rulesets/overlays/`, and a plain glob left
+    every overlay with `file: null` and `is_overlay: false` on the admin screen —
+    the one screen whose whole job is to show that the state variation is a file.
+    """
     from app.domain.rules.loader import rulesets_dir
 
     out = []
-    for path in sorted(rulesets_dir().glob("*.yaml")):
+    for path in sorted(rulesets_dir().rglob("*.yaml")):
         try:
             doc = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
             out.append((str(doc.get("track", "")), str(doc.get("version", "")), path))
@@ -99,8 +65,13 @@ def _ruleset_files() -> list[tuple[str, str, object]]:
 
 @router.get("/admin/rulesets")
 def list_rulesets_endpoint(user: CurrentUser = Depends(get_current_user)):
-    """Loaded tracks with their stage/transition/clock counts. Read-only and free of
-    case data, so any authenticated role may see it."""
+    """Loaded tracks with their stage/transition/clock counts, overlays included.
+
+    An overlay is a loaded rule-set like any other — the loader merges it onto its
+    base and registers it under its own version — so it appears here as its own
+    entry, carrying `base_version` and `overlay_title` for the diff link. Read-only
+    and free of case data, so any authenticated role may see it.
+    """
     from app.domain.rules.loader import list_rulesets
 
     files = {(t, v): p for t, v, p in _ruleset_files()}
@@ -110,6 +81,7 @@ def list_rulesets_endpoint(user: CurrentUser = Depends(get_current_user)):
         items.append({
             "track": rs.track,
             "version": rs.version,
+            "ref": f"{rs.track}@{rs.version}",
             "stages": len(rs.stages),
             "clocks": len(rs.clocks),
             "transitions": len(rs.transitions),
@@ -117,9 +89,81 @@ def list_rulesets_endpoint(user: CurrentUser = Depends(get_current_user)):
             "clock_ids": [c.id for c in rs.clocks],
             "alerts": rs.alerts,
             "file": path.name if path is not None else None,
-            "is_overlay": bool(path is not None and "overlay" in str(path).lower()),
+            # The loader is the authority on what an overlay is, not the file path.
+            "is_overlay": rs.base_version is not None,
+            "base_version": rs.base_version,
+            "overlay_title": rs.overlay_title,
         })
-    return {"items": items, "count": len(items)}
+    overlays = [i for i in items if i["is_overlay"]]
+    return {"items": items, "count": len(items), "overlay_count": len(overlays)}
+
+
+def _parse_ruleset_ref(ref: str, field: str):
+    """`RFCTLARR_2013@2026.09` -> the loaded rule-set, or a 404."""
+    from app.domain.rules.loader import get_ruleset
+
+    text = (ref or "").strip()
+    if "@" not in text:
+        raise Problem(
+            "validation_error",
+            "Validation error",
+            422,
+            f"{field} must be TRACK@VERSION, e.g. RFCTLARR_2013@2026.09",
+            errors=[{"field": field, "got": ref}],
+        )
+    track, _, version = text.partition("@")
+    rs = get_ruleset(track.strip().upper(), version.strip())
+    if rs is None:
+        raise not_found()
+    return rs
+
+
+@router.get("/admin/rulesets/diff")
+def diff_rulesets(
+    base: str = Query(..., description="TRACK@VERSION, e.g. RFCTLARR_2013@2026.09"),
+    overlay: str = Query(..., description="TRACK@VERSION, e.g. RFCTLARR_2013@2026.09-MH"),
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Unified diff of the two *effective* rule-sets — base merged, overlay merged.
+
+    This is the artefact shown on stage for "a state variation is a config change":
+    the Maharashtra overlay's s.10A exemption and its Divisional Commissioner rung on
+    the escalation ladder show up as added lines in a diff any reviewer can read. It
+    diffs the merged documents rather than the two files, because the file only says
+    what changed — the merged pair says what each case is actually judged against.
+
+    `text/plain`, so it can be piped, saved, or pasted into a note verbatim.
+    """
+    from app.domain.rules.loader import effective_yaml
+
+    base_rs = _parse_ruleset_ref(base, "base")
+    overlay_rs = _parse_ruleset_ref(overlay, "overlay")
+    base_ref = f"{base_rs.track}@{base_rs.version}"
+    overlay_ref = f"{overlay_rs.track}@{overlay_rs.version}"
+    lines = difflib.unified_diff(
+        effective_yaml(base_rs).splitlines(),
+        effective_yaml(overlay_rs).splitlines(),
+        fromfile=base_ref,
+        tofile=overlay_ref,
+        lineterm="",
+    )
+    body = "\n".join(lines)
+    if body:
+        body += "\n"
+    else:
+        body = f"# {base_ref} and {overlay_ref} are identical\n"
+    return Response(
+        content=body,
+        media_type="text/plain; charset=utf-8",
+        headers={
+            "X-Ruleset-Base": base_ref,
+            "X-Ruleset-Overlay": overlay_ref,
+            # HTTP headers are latin-1; the overlay titles carry em dashes.
+            "X-Overlay-Title": (overlay_rs.overlay_title or "")
+            .encode("ascii", "replace")
+            .decode("ascii"),
+        },
+    )
 
 
 @router.get("/admin/rulesets/{track}/{version}")
@@ -141,12 +185,53 @@ def get_ruleset_yaml(
 
 @router.get("/admin/integrations")
 def list_integrations(user: CurrentUser = Depends(get_current_user)):
+    """The live adapter registry (Docs/APIs.md §4).
+
+    `mode` and `last_test` are read off the adapter objects themselves, so this list
+    cannot describe a connection the process does not have. `last_test` is
+    in-process and resets on restart — it records the last time someone pressed the
+    button, not a background sync we do not run.
+    """
+    items = [a.describe() for a in list_adapters()]
     return {
-        "items": INTEGRATIONS,
-        "count": len(INTEGRATIONS),
-        "live_count": sum(1 for a in INTEGRATIONS if a["mode"] == "live"),
-        "note": "All adapters are mocks in this build; interfaces are real.",
+        "items": items,
+        "count": len(items),
+        "live_count": sum(1 for a in items if a["mode"] == "live"),
+        "note": "All adapters are mocks in this build; the interfaces are real.",
     }
+
+
+@router.post("/admin/integrations/{name}/test")
+def test_integration(
+    name: str,
+    db: Session = Depends(get_db),
+    caller: CurrentUser = Depends(get_current_user),
+):
+    """Run one adapter's self-check and record who ran it.
+
+    A failing dependency is a `200` with `ok: false`, not a `5xx`: showing that
+    state is the whole point of the screen. Unknown adapter names are `404` like
+    every other missing resource.
+    """
+    if not caller.has_role(*INTEGRATION_TEST_ROLES):
+        raise not_found()
+    adapter = get_adapter(name)
+    if adapter is None:
+        raise not_found()
+
+    result = adapter.test(db)
+    try:
+        actor = uuid.UUID(str(caller.id))
+    except (ValueError, TypeError):
+        actor = None
+    db.add(AdminAudit(
+        user_id=actor,
+        action="INTEGRATION_TEST",
+        target=adapter.name,
+        meta={"ok": result["ok"], "mode": result["mode"], "detail": result["detail"]},
+    ))
+    db.commit()
+    return result
 
 
 @router.get("/admin/audit")
