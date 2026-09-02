@@ -179,13 +179,29 @@ def _merge_overlay(base_doc: dict, overlay_doc: dict) -> dict:
     return merged
 
 
+def _normalise_doc(doc: dict) -> dict:
+    """Undo YAML 1.1's `on` -> True key resolution in the raw document so the
+    effective YAML (admin diff viewer) reads `on:` like the file the officer wrote,
+    and stringify the version so `'2026.09'` and `2026.09` never diff against each other."""
+    if not isinstance(doc, dict):
+        return doc
+    if "version" in doc:
+        doc["version"] = str(doc["version"])
+    if "base_version" in doc:
+        doc["base_version"] = str(doc["base_version"])
+    for name, spec in (doc.get("stages") or {}).items():
+        if isinstance(spec, dict) and True in spec and "on" not in spec:
+            spec["on"] = spec.pop(True)
+    return doc
+
+
 def load_all_rulesets() -> dict[tuple[str, str], Ruleset]:
     _REGISTRY.clear()
     d = rulesets_dir()
     docs: list[tuple[dict, str]] = []
     for f in sorted(d.rglob("*.yaml")):
         try:
-            docs.append((yaml.safe_load(f.read_text(encoding="utf-8")), f.name))
+            docs.append((_normalise_doc(yaml.safe_load(f.read_text(encoding="utf-8"))), f.name))
         except Exception:
             log.exception("failed to read ruleset %s", f)
     # Two passes: bases first, then overlays — file order must not matter.

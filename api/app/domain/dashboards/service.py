@@ -228,11 +228,20 @@ def kpis(db: Session, case_ids: list[uuid.UUID] | None, today: date) -> dict:
 
     # --- derived percentages -----------------------------------------------------
     possession_pct = round(100.0 * area_acquired / area_notified, 2) if area_notified else 0.0
-    delivered = _event_count(db, case_ids, ("RR_ENTITLEMENT_DELIVERED",))
-    rr_progress = (
-        round(100.0 * min(delivered, families_affected) / families_affected, 2)
-        if families_affected else 0.0
-    )
+    # Entitlement-head level, the same arithmetic the case's R&R tab shows: delivered
+    # heads over all heads across the families in scope. Counting events per family
+    # would read 100% once each family had received any one head.
+    fam_rows = db.scalars(
+        _scoped(select(AffectedFamily.rr_entitlements), case_ids, AffectedFamily.case_id)
+    ).all()
+    heads_total = heads_delivered = 0
+    for ent in fam_rows:
+        for row in (ent or {}).values():
+            if isinstance(row, dict):
+                heads_total += 1
+                if row.get("status") == "delivered":
+                    heads_delivered += 1
+    rr_progress = round(100.0 * heads_delivered / heads_total, 2) if heads_total else 0.0
 
     return {
         "area_proposed_ha": area_proposed,
