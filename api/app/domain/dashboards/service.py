@@ -187,10 +187,14 @@ def kpis(db: Session, case_ids: list[uuid.UUID] | None, today: date) -> dict:
     # --- families ----------------------------------------------------------------
     families_affected = _i(sum(int(s.families_affected or 0) for s in states))
     families_displaced = _i(sum(int(s.families_displaced or 0) for s in states))
+    # A family whose enumeration was reversed is not an affected family: it is excluded
+    # here exactly as it is from the R&R register, so the dashboard KPI and the module
+    # cannot disagree about how many households a case affects.
     if families_affected == 0:
         families_affected = _i(db.scalar(
             _scoped(select(func.count()).select_from(AffectedFamily),
                     case_ids, AffectedFamily.case_id)
+            .where(AffectedFamily.withdrawn_at.is_(None))
         ))
         sources["families_affected"] = "affected_families"
     else:
@@ -200,6 +204,7 @@ def kpis(db: Session, case_ids: list[uuid.UUID] | None, today: date) -> dict:
             _scoped(select(func.count()).select_from(AffectedFamily),
                     case_ids, AffectedFamily.case_id)
             .where(AffectedFamily.displaced.is_(True))
+            .where(AffectedFamily.withdrawn_at.is_(None))
         ))
 
     # --- clocks ------------------------------------------------------------------
@@ -233,6 +238,7 @@ def kpis(db: Session, case_ids: list[uuid.UUID] | None, today: date) -> dict:
     # would read 100% once each family had received any one head.
     fam_rows = db.scalars(
         _scoped(select(AffectedFamily.rr_entitlements), case_ids, AffectedFamily.case_id)
+        .where(AffectedFamily.withdrawn_at.is_(None))
     ).all()
     heads_total = heads_delivered = 0
     for ent in fam_rows:

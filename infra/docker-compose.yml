@@ -48,6 +48,11 @@ services:
       MINIO_SECURE: "false"
       MINIO_PUBLIC_ENDPOINT: localhost:9100
       JWT_SECRET: dev-secret-change-me
+      # Affected-family PII key (AES-256-GCM, 64 hex chars — Docs/rules.md C5).
+      # This is a DEMO value and is in version control: production must supply a
+      # KMS-backed key here instead, and run with DEMO_MODE=false, which makes the
+      # API refuse to start until it does.
+      PII_KEY: "6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b"
       DEMO_MODE: "true"
       SEED_ON_START: "true"
     ports:

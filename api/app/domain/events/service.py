@@ -158,8 +158,10 @@ def _validate_reversal(db: Session, case: Case, payload: dict) -> None:
                 }
             ],
         )
-    owner = db.scalar(select(Event.case_id).where(Event.id == target_id))
-    if owner is None or owner != case.id:
+    target = db.execute(
+        select(Event.case_id, Event.type).where(Event.id == target_id)
+    ).first()
+    if target is None or target[0] != case.id:
         raise Problem(
             "validation_error",
             "Validation error",
@@ -170,6 +172,26 @@ def _validate_reversal(db: Session, case: Case, payload: dict) -> None:
                 {
                     "field": "payload.reversed_event_id",
                     "message": "not an event of this case",
+                    "value": str(target_id),
+                }
+            ],
+        )
+    if target[1] == REVERSAL_EVENT:
+        # Reversing a reversal was accepted and did nothing: `_apply_reversal` branches
+        # on PAYMENT_MADE / COMPENSATION_ASSESSED / FAMILY_ENUMERATED, and `rebuild_case`
+        # drops the inner marker as withdrawn — so both projections agreed the money was
+        # still gone while the ledger permanently recorded a correction that corrected
+        # nothing. Reinstatement is not built (Docs/mvp-status.md); the honest path is
+        # to record the corrected fact as a fresh event.
+        raise Problem(
+            "validation_error",
+            "Validation error",
+            422,
+            "un-reversal is not supported; record the corrected fact as a new event",
+            errors=[
+                {
+                    "field": "payload.reversed_event_id",
+                    "message": "target is itself an EVENT_REVERSED",
                     "value": str(target_id),
                 }
             ],

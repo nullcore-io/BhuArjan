@@ -33,6 +33,7 @@ from sqlalchemy.orm import Session
 from app.core.db import get_db
 from app.core.deps import CurrentUser, get_current_user
 from app.core.problems import Problem, not_found
+from app.domain.dashboards.scope import scoped_case_ids
 from app.domain.integrations import get_adapter, list_adapters
 from app.models import AdminAudit, User
 
@@ -246,11 +247,24 @@ def list_audit(
     caller: CurrentUser = Depends(get_current_user),
 ):
     """Non-domain audit: logins, role changes, PII reads, alert acks, extraction
-    rejections (Docs/Backend.md §2). Statutory history lives in the ledger, not here."""
+    rejections (Docs/Backend.md §2). Statutory history lives in the ledger, not here.
+
+    Scoped by jurisdiction like every other read (Docs/rules.md C6, Docs/APIs.md §1).
+    AUDIT_ROLES admits COLLECTOR and STATE_REVENUE, and the unfiltered query made this
+    endpoint a nationwide enumeration oracle: it listed the case numbers, case ids and
+    family ids of cases the same caller is 404'd from, together with which officer read
+    which family's name and why. A row that names no case is a system-level record
+    (logins, role changes) and stays national-only.
+    """
     if not caller.has_role(*AUDIT_ROLES):
         raise not_found()
 
     q = select(AdminAudit)
+    allowed = scoped_case_ids(db, caller)
+    if allowed is not None:
+        q = q.where(
+            AdminAudit.meta["case_id"].astext.in_([str(cid) for cid in allowed])
+        )
     if user_id:
         try:
             q = q.where(AdminAudit.user_id == uuid.UUID(str(user_id)))

@@ -17,6 +17,11 @@ Two integrity properties every export carries (rules.md C7):
   content address, so a file someone mailed onwards can be checked against the job
   it came from.
 
+The whole build runs in one REPEATABLE READ transaction (`begin_snapshot`) so those
+two properties describe the same instant: the header's sequence number and the rows
+under it come from one snapshot, not from two statements a concurrent commit can slip
+between.
+
 Scope is the caller's jurisdiction, resolved through the same
 `app.domain.dashboards.scope` helpers the dashboards use, then narrowed by the
 request filters. A report can therefore never contain a case its requester could not
@@ -275,6 +280,29 @@ def _cases_geojson(db: Session, case_ids: list[uuid.UUID], meta: dict) -> tuple[
 # --- generation ---------------------------------------------------------------------
 
 
+SNAPSHOT_ISOLATION = "REPEATABLE READ"
+
+
+def begin_snapshot(db: Session) -> None:
+    """Put the rest of this transaction on one snapshot of the database.
+
+    `as_of_seq` is read before the rows, and the session is READ COMMITTED, so every
+    statement took a fresh snapshot: a payment committed by another officer in between
+    landed *in the body* of a CSV whose first line said `# as_of_seq=N` excluding it.
+    Docs/rules.md C7 makes that embedded sequence the export's provenance, and
+    `report_hash` then certifies bytes whose stated anchor is wrong. One REPEATABLE READ
+    transaction makes the header and the body true at the same instant — no timing
+    assumptions, no retry loop.
+
+    The isolation level can only be set on a connection with no transaction in progress,
+    and the request has already read the caller's scope by the time we get here, so the
+    read transaction is closed first. Nothing is pending: this path only reads until it
+    writes the job row.
+    """
+    db.rollback()
+    db.connection(execution_options={"isolation_level": SNAPSHOT_ISOLATION})
+
+
 def generate_report(
     db: Session,
     *,
@@ -289,6 +317,7 @@ def generate_report(
     from app.domain.documents import storage
 
     ensure_tables()
+    begin_snapshot(db)
     generated_at = datetime.now(timezone.utc)
     meta = {
         "template": template,

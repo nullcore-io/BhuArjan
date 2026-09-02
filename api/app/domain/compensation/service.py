@@ -258,24 +258,27 @@ def summary(db: Session, case: Case, today: date) -> dict:
 # --- payments ----------------------------------------------------------------------
 
 
-def allocate_payment(
-    db: Session,
-    case: Case,
-    amount_paise: int,
-    line_id: uuid.UUID | None = None,
-) -> list[dict]:
-    """Apply a payment to award lines. A named line takes it directly; otherwise it
-    is applied to lines in assessment order until exhausted. Returns the allocation
-    so the caller can record it on the event and nothing is applied silently."""
-    q = select(CompensationLine).where(CompensationLine.case_id == case.id)
-    if line_id is not None:
-        q = q.where(CompensationLine.id == line_id)
-    lines = db.scalars(
-        q.order_by(CompensationLine.created_at.asc(), CompensationLine.id.asc())
-    ).all()
-    if line_id is not None and not lines:
-        raise Problem("not_found", "Not found", 404, "compensation line not found on this case")
+def case_lines(db: Session, case_id: uuid.UUID) -> list[CompensationLine]:
+    """The case's award lines in assessment order — the order money is applied in."""
+    return list(
+        db.scalars(
+            select(CompensationLine)
+            .where(CompensationLine.case_id == case_id)
+            .order_by(CompensationLine.created_at.asc(), CompensationLine.id.asc())
+        ).all()
+    )
 
+
+def apply_to_lines(
+    lines: list[CompensationLine], amount_paise: int, db: Session | None = None
+) -> list[dict]:
+    """THE allocation rule: fill each line to its total, in order, until exhausted.
+
+    One function, two callers — `allocate_payment` when the money arrives and
+    `recompute_allocations` when a payment is withdrawn and the lines have to be put
+    back. They cannot drift, which matters because the difference between them would
+    show up as an award reported paid that nobody paid.
+    """
     remaining = int(amount_paise)
     allocation: list[dict] = []
     for line in lines:
@@ -286,14 +289,97 @@ def allocate_payment(
             continue
         applied = min(room, remaining)
         line.paid_paise = int(line.paid_paise or 0) + applied
-        db.add(line)
+        if db is not None:
+            db.add(line)
         remaining -= applied
         allocation.append({"line_id": str(line.id), "applied_paise": applied})
-    db.flush()
     if remaining > 0:
         # Never dropped silently: the surplus is reported back on the event payload.
         allocation.append({"line_id": None, "unallocated_paise": remaining})
     return allocation
+
+
+def allocate_payment(
+    db: Session,
+    case: Case,
+    amount_paise: int,
+    line_id: uuid.UUID | None = None,
+) -> list[dict]:
+    """Apply a payment to award lines. A named line takes it directly; otherwise it
+    is applied to lines in assessment order until exhausted. Returns the allocation
+    so the caller can record it on the event and nothing is applied silently."""
+    lines = case_lines(db, case.id)
+    if line_id is not None:
+        lines = [line for line in lines if line.id == line_id]
+        if not lines:
+            raise Problem(
+                "not_found", "Not found", 404, "compensation line not found on this case"
+            )
+
+    allocation = apply_to_lines(lines, int(amount_paise), db)
+    db.flush()
+    return allocation
+
+
+def recompute_allocations(db: Session, case: Case) -> int:
+    """Rebuild every line's `paid_paise` by replaying the payments that still stand.
+
+    Reversing a PAYMENT_MADE used to withdraw it from `case_state.comp_paid_paise` and
+    stop there: `compensation_lines.paid_paise` kept the money, so the compensation
+    screen and the `compensation_register` export reported an unpaid award as paid in
+    full — under a `report_hash` certifying those bytes — while the s.38 gate, which
+    reads the projection, refused possession on the same case. Two screens of one
+    product contradicting each other about whether a statutory payment exists.
+
+    So the lines are recomputed from the ledger rather than adjusted: zero them, then
+    replay every PAYMENT_MADE no EVENT_REVERSED has withdrawn, in `seq` order, through
+    `apply_to_lines` — the same rule that allocated them in the first place. A payment
+    that named one line replays against that line alone; the id is read back from the
+    allocation the event itself recorded, so the replay does not need to guess.
+
+    Returns the total paise now allocated to lines.
+    """
+    from app.domain.cases.projections import reversed_event_ids
+
+    lines = case_lines(db, case.id)
+    by_id = {line.id: line for line in lines}
+    for line in lines:
+        line.paid_paise = 0
+        db.add(line)
+
+    withdrawn = reversed_event_ids(db, case.id)
+    payments = db.scalars(
+        select(Event)
+        .where(Event.case_id == case.id, Event.type == "PAYMENT_MADE")
+        .order_by(Event.seq.asc())
+    ).all()
+    for payment in payments:
+        if payment.id in withdrawn:
+            continue
+        payload = payment.payload or {}
+        target = _targeted_line(payload)
+        candidates = lines
+        if target is not None and target in by_id:
+            candidates = [by_id[target]]
+        apply_to_lines(candidates, int(payload.get("amount_paise") or 0), db)
+    db.flush()
+    return sum(int(line.paid_paise or 0) for line in lines)
+
+
+def _targeted_line(payload: dict) -> uuid.UUID | None:
+    """The single line a payment was directed at, or None if it was applied in order.
+
+    `record_payment` writes `line_id` onto the payload precisely so a replay never has
+    to infer it from the recorded allocation; a payment written before that carries no
+    `line_id` and replays through the ordinary in-order rule, which is what it was
+    allocated by unless an officer named a line."""
+    raw = payload.get("line_id")
+    if raw:
+        try:
+            return uuid.UUID(str(raw))
+        except (ValueError, TypeError):
+            return None
+    return None
 
 
 def record_payment(
@@ -320,15 +406,21 @@ def record_payment(
     when = occurred_at or today
     allocation = allocate_payment(db, case, int(amount_paise), line_id)
 
+    payload: dict = {
+        "pfms_ref": pfms_ref,
+        "amount_paise": int(amount_paise),
+        "payee_ref": payee_ref,
+        "mode": mode,
+        "allocation": allocation,
+    }
+    if line_id is not None:
+        # Recorded so `recompute_allocations` can replay a line-directed payment
+        # against the same line instead of spreading it in assessment order.
+        payload["line_id"] = str(line_id)
+
     payment = append_event(
         db, case, "PAYMENT_MADE", when, actor_id,
-        {
-            "pfms_ref": pfms_ref,
-            "amount_paise": int(amount_paise),
-            "payee_ref": payee_ref,
-            "mode": mode,
-            "allocation": allocation,
-        },
+        payload,
         idempotency_key=idempotency_key,
         today=today,
     )

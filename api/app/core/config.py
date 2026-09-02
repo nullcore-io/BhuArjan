@@ -10,6 +10,11 @@ class Settings(BaseSettings):
     MINIO_PUBLIC_ENDPOINT: str = "localhost:9100"
     MINIO_BUCKET: str = "bhuarjan-docs"
     JWT_SECRET: str = "dev-secret-change-me"
+    # AES-256-GCM key for field-level PII encryption, 64 hex characters
+    # (Docs/rules.md C5, Docs/Backend.md §10). Empty is only tolerated in DEMO_MODE,
+    # where app.core.crypto falls back to a published development constant; outside
+    # DEMO_MODE the API refuses to start without a real key.
+    PII_KEY: str = ""
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_MINUTES: int = 480
     DEMO_MODE: bool = True

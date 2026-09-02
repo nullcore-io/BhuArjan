@@ -45,11 +45,22 @@ def expand_org_units(db: Session, roots: list[uuid.UUID]) -> set[uuid.UUID]:
 
 
 def is_national(db: Session, user: CurrentUser) -> bool:
+    """Country-wide reach is granted by *role*, never by the absence of a scope.
+
+    An empty scope claim used to mean national. `roles_and_scopes` skips role
+    assignments whose `org_unit_id` is NULL — which is legitimate for MINISTRY and
+    AUDITOR — so a COLLECTOR or ADMIN_RR row created without an org unit (an admin slip,
+    an import) minted a token with `scopes: []` and got read access to every case in the
+    country, including the purpose-gated PII decrypt those two roles alone can do. The
+    one control Docs/rules.md C6 makes mandatory was failing open. A district or state
+    role with no org unit now sees nothing, which is what an unassigned officer should
+    see.
+    """
     if any(r.upper() in NATIONAL_ROLES for r in user.roles):
         return True
     scope_ids = [u for u in (_as_uuid(s) for s in user.scopes) if u]
     if not scope_ids:
-        return True  # no scope claim at all -> national read (demo tokens)
+        return False
     kinds = db.scalars(select(OrgUnit.kind).where(OrgUnit.id.in_(scope_ids))).all()
     return any(k == "ministry" for k in kinds)
 

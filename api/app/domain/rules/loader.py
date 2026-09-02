@@ -20,6 +20,10 @@ class ClockSpec:
     starts_on: str
     duration: dict
     ends_on: str | None = None
+    # A named predicate (app.domain.rules.predicates) that decides closure from the
+    # state of the case rather than from a single event: the R&R clocks close when
+    # every family has been served, not when the first delivery is recorded.
+    ends_when: str | None = None
     basis: str = ""
     consequence: str = ""
     kind: str = "deadline"  # deadline | window
@@ -60,6 +64,8 @@ class Ruleset:
 
 
 _REGISTRY: dict[tuple[str, str], Ruleset] = {}
+# The file each registry key was claimed by, so a collision can name both documents.
+_SOURCES: dict[tuple[str, str], str] = {}
 
 _VERSION_CHUNK = re.compile(r"(\d+)")
 
@@ -74,12 +80,18 @@ def version_sort_key(version: str) -> tuple:
     numerically; whatever separates them compares as text. Every element is the same
     3-tuple shape so a version that mixes digits and letters can never raise on
     comparison.
+
+    The raw string is appended as a final tiebreak. Without it `'2026.9'` and
+    `'2026.09'` — two distinct registry keys — compared *equal*, so which of them a new
+    project landed on was decided by dict iteration order rather than by the rule-set
+    directory.
     """
-    return tuple(
+    chunks = tuple(
         (1, int(chunk), "") if chunk.isdigit() else (0, 0, chunk)
         for chunk in _VERSION_CHUNK.split(str(version))
         if chunk
     )
+    return chunks + ((1, 0, str(version)),)
 
 
 def _stage_on(spec) -> list[str]:
@@ -122,6 +134,7 @@ def _parse(doc: dict) -> Ruleset:
                 id=c["id"],
                 starts_on=c["starts_on"],
                 ends_on=c.get("ends_on"),
+                ends_when=c.get("ends_when"),
                 duration=c.get("duration", {}),
                 basis=c.get("basis", ""),
                 consequence=c.get("consequence", ""),
@@ -150,18 +163,82 @@ def rulesets_dir() -> Path:
     return p
 
 
-def _merge_overlay(base_doc: dict, overlay_doc: dict) -> dict:
+def _merge_transitions(base: dict, overlay: dict, name: str) -> dict:
+    """Transitions merged **per field**, not per event (Docs/Backend.md §5).
+
+    A whole-value replace meant a state overlay restating a transition only to change
+    its `section:` citation silently deleted that transition's `requires:` and `guard:`
+    — including the s.38 possession-payment gate, so a case could walk from PROPOSED to
+    POSSESSED with nothing assessed and nothing paid. An overlay that does not mention
+    a key therefore keeps the base's value for it.
+
+    A key the overlay *does* write still wins, `guard: null` and `requires: []`
+    included: removing a gate is a legitimate thing for a State amendment to do, and
+    saying so explicitly is how it is done. Because that is the dangerous direction, it
+    is logged at WARNING.
+    """
+    eff = {k: (dict(v) if isinstance(v, dict) else v) for k, v in (base or {}).items()}
+    for event_type, spec in (overlay or {}).items():
+        current = eff.get(event_type)
+        if not isinstance(spec, dict) or not isinstance(current, dict):
+            eff[event_type] = spec
+            continue
+        for field_name in ("guard", "requires"):
+            if field_name not in spec:
+                continue
+            was, now = current.get(field_name), spec.get(field_name)
+            if was and not now:
+                log.warning(
+                    "overlay %s removes %s from transition %s (was %r): the base's "
+                    "statutory precondition no longer applies under this rule-set",
+                    name, field_name, event_type, was,
+                )
+        eff[event_type] = {**current, **spec}
+    return eff
+
+
+def _merge_stages(base: dict, overlay: dict, name: str) -> dict:
+    """Stages merged per field too, with every event type an overlay drops logged.
+
+    An overlay rewriting a stage's `on:` list is replacing the whole list — that is
+    what a list means — but a stage that quietly loses PRELIM_NOTIFICATION_S11 or
+    EVENT_REVERSED strands every case sitting in it with no way forward and no way to
+    correct the record, and the admin diff renders the loss as an absent line rather
+    than as a removal. So the loader says so, once per event type, at WARNING.
+    """
+    eff = {k: (dict(v) if isinstance(v, dict) else v) for k, v in (base or {}).items()}
+    for stage, spec in (overlay or {}).items():
+        current = eff.get(stage)
+        if not isinstance(spec, dict) or not isinstance(current, dict):
+            eff[stage] = spec
+            continue
+        merged_stage = {**current, **spec}
+        dropped = [e for e in _stage_on(current) if e not in _stage_on(merged_stage)]
+        for event_type in dropped:
+            log.warning(
+                "overlay %s removes %s from stage %s: no case in that stage can "
+                "record it under this rule-set",
+                name, event_type, stage,
+            )
+        eff[stage] = merged_stage
+    return eff
+
+
+def _merge_overlay(base_doc: dict, overlay_doc: dict, name: str = "overlay") -> dict:
     """Base + overlay -> effective document (Docs/Backend.md §5: keys override or add).
 
-    stages: per-stage replace; transitions: per-event replace; clocks: replace by id,
+    stages and transitions: per-key merge one level down, so restating a stanza to
+    change one field keeps the fields it does not mention; clocks: replace by id,
     append new ids; alerts: per-key replace one level down (thresholds/escalation).
     """
     merged = dict(base_doc)
     merged["version"] = str(overlay_doc["version"])
-    for section in ("stages", "transitions"):
-        eff = dict(base_doc.get(section) or {})
-        eff.update(overlay_doc.get(section) or {})
-        merged[section] = eff
+    merged["stages"] = _merge_stages(
+        base_doc.get("stages") or {}, overlay_doc.get("stages") or {}, name
+    )
+    merged["transitions"] = _merge_transitions(
+        base_doc.get("transitions") or {}, overlay_doc.get("transitions") or {}, name
+    )
     if overlay_doc.get("clocks"):
         by_id = {c["id"]: c for c in (base_doc.get("clocks") or [])}
         for c in overlay_doc["clocks"]:
@@ -195,8 +272,32 @@ def _normalise_doc(doc: dict) -> dict:
     return doc
 
 
+def _register(rs: Ruleset, name: str) -> bool:
+    """Claim `(track, version)` for this document, or refuse it.
+
+    First file wins. Two documents declaring the same pair used to overwrite each other
+    with the winner decided by filename sort order, so copying an overlay to a new
+    filename without bumping its version silently changed which rule-set the estate ran
+    on — and an overlay whose `version` equalled its `base_version` replaced the base
+    itself, which is precisely what pinning exists to prevent (see `get_ruleset`).
+    """
+    key = (rs.track, rs.version)
+    incumbent = _SOURCES.get(key)
+    if incumbent is not None:
+        log.error(
+            "rule-set %s@%s is declared twice: keeping %s, refusing %s — bump the "
+            "version in one of them; a rule-set version is an identity, not a label",
+            rs.track, rs.version, incumbent, name,
+        )
+        return False
+    _REGISTRY[key] = rs
+    _SOURCES[key] = name
+    return True
+
+
 def load_all_rulesets() -> dict[tuple[str, str], Ruleset]:
     _REGISTRY.clear()
+    _SOURCES.clear()
     d = rulesets_dir()
     docs: list[tuple[dict, str]] = []
     for f in sorted(d.rglob("*.yaml")):
@@ -210,25 +311,37 @@ def load_all_rulesets() -> dict[tuple[str, str], Ruleset]:
             continue
         try:
             rs = _parse(doc)
-            _REGISTRY[(rs.track, rs.version)] = rs
-            log.info("loaded ruleset %s@%s from %s", rs.track, rs.version, name)
+            if _register(rs, name):
+                log.info("loaded ruleset %s@%s from %s", rs.track, rs.version, name)
         except Exception:
             log.exception("failed to load ruleset %s", name)
     for doc, name in docs:
         if not doc.get("overlay"):
             continue
         try:
-            base = _REGISTRY.get((doc["track"], str(doc["base_version"])))
+            base_version = str(doc["base_version"])
+            if str(doc["version"]) == base_version:
+                # Registering it would replace the base under its own key: every live
+                # case pinned to that version would start being judged against a
+                # different document, and the track would lose its default rule-set.
+                log.error(
+                    "overlay %s declares version %s, the same version as its base: an "
+                    "overlay must carry a version of its own or it overwrites the "
+                    "document it amends — refusing to load it",
+                    name, base_version,
+                )
+                continue
+            base = _REGISTRY.get((doc["track"], base_version))
             if base is None:
                 log.error("overlay %s: base %s@%s not loaded", name, doc.get("track"),
                           doc.get("base_version"))
                 continue
-            rs = _parse(_merge_overlay(base.raw, doc))
-            rs.base_version = str(doc["base_version"])
+            rs = _parse(_merge_overlay(base.raw, doc, name))
+            rs.base_version = base_version
             rs.overlay_title = doc.get("title")
-            _REGISTRY[(rs.track, rs.version)] = rs
-            log.info("loaded overlay %s@%s (base %s) from %s", rs.track, rs.version,
-                     rs.base_version, name)
+            if _register(rs, name):
+                log.info("loaded overlay %s@%s (base %s) from %s", rs.track, rs.version,
+                         rs.base_version, name)
         except Exception:
             log.exception("failed to load overlay %s", name)
     return _REGISTRY

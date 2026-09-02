@@ -10,14 +10,17 @@ in `app.domain.rr.service`. Jurisdiction is resolved by `require_case` on every 
 including the family-addressed one — an out-of-scope family is a 404, never a 403
 (Docs/APIs.md §1).
 
-Who may see a name. Docs/rules.md C5 (DPDP Act 2023) allows a decrypt only for a role
-with jurisdiction *and* a stated purpose, and requires every such read to be audited.
-`PII_ROLES` is deliberately narrow: it does not include ADMIN, because a system
-administrator has no statutory business reading an affected family's name, and it does
-not include LAO/CALA, MINISTRY, AUDITOR or RB, who work from the masked view. Note that
-Docs/APIs.md §2's RBAC table shows State as *masked*; this build follows the module
-brief and admits STATE_REVENUE with a purpose — see the R&R notes for the owner to
-settle before the finale.
+Who may open the register at all, and who may see a name — Docs/APIs.md §2, row
+"R&R families (PII)": RB `—`, LAO/CALA masked, Collector and Administrator R&R full
+(with a purpose), State masked, Ministry *aggregate*, Auditor masked.
+
+So `REGISTER_ROLES` admits LAO, CALA, COLLECTOR, ADMIN_RR, STATE_REVENUE and AUDITOR.
+The Ministry's "aggregate" is `GET /cases/{id}/rr/summary`, not a masked family list, so
+Ministry is 404 on the register; RB and ADMIN are 404 for the same reason they are `—`
+in the matrix. Within the register, `PII_ROLES` releases names to COLLECTOR and ADMIN_RR
+only, with a purpose, and every such read is audited (Docs/rules.md C5). ADMIN is
+deliberately absent: a system administrator has no statutory business reading an
+affected family's name.
 """
 
 from __future__ import annotations
@@ -39,6 +42,9 @@ router = APIRouter()
 # Recording an affected family and delivering an entitlement are field acts.
 ENUMERATE_ROLES = {"LAO", "CALA", "COLLECTOR", "ADMIN_RR", "ADMIN"}
 DELIVER_ROLES = {"LAO", "CALA", "COLLECTOR", "ADMIN_RR", "ADMIN"}
+# Roles that may open the affected-family register at all (Docs/APIs.md §2). Ministry
+# gets the aggregate through /rr/summary; RB and ADMIN are '—' on this row.
+REGISTER_ROLES = {"LAO", "CALA", "COLLECTOR", "ADMIN_RR", "STATE_REVENUE", "AUDITOR"}
 # Roles that may see a name, and only with a purpose (Docs/rules.md C5).
 PII_ROLES = {"COLLECTOR", "ADMIN_RR"}  # Docs/APIs.md §2: State sees masked rows
 
@@ -75,8 +81,8 @@ def _unlock(user: CurrentUser, purpose: str | None) -> tuple[bool, str]:
     purpose = (purpose or "").strip()
     if not user.has_role(*PII_ROLES):
         return False, (
-            "your role may see the masked register only; names are released to "
-            "Collector, Administrator R&R and State Revenue (Docs/rules.md C5)"
+            "your role may see the masked register only; names are released to the "
+            "Collector and the Administrator R&R (Docs/APIs.md §2, Docs/rules.md C5)"
         )
     if not purpose:
         return False, (
@@ -96,9 +102,15 @@ def list_families_endpoint(
     user: CurrentUser = Depends(get_current_user),
 ):
     """The affected-family register for a case. Masked unless the caller has both a
-    PII role and a purpose; every unlocked read writes an `admin_audit` PII_READ row."""
+    PII role and a purpose; every unlocked read writes an `admin_audit` PII_READ row.
+
+    A role the §2 matrix gives no family-level view is a 404, not a 403 — the register
+    must not be an oracle for its own existence (Docs/APIs.md §1).
+    """
     from app.domain.rr.service import list_families
 
+    if not user.has_role(*REGISTER_ROLES):
+        raise not_found()
     case = require_case(db, case_id, user)
     unlock, reason = _unlock(user, purpose)
 

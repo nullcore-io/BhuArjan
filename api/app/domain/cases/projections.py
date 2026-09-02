@@ -22,12 +22,22 @@ the newest assessment nobody has reversed, a reversed enumeration stops counting
 family. It does not move the stage back. Un-lapsing a case — restoring the stage a
 reversed transition moved it out of — is deliberately out of scope here and in
 `rebuild_case`: a reversed transition still replays.
+
+Two reversals reach past `case_state`, because leaving the rest of the system behind
+made two screens of one product disagree about a statutory fact:
+
+  PAYMENT_MADE       the award lines are recomputed from the payments that still
+                     stand, and a COMPENSATION_PAID_FULL the withdrawn payment bought
+                     is itself reversed as the SYSTEM actor (`_unwind_payment`)
+  FAMILY_ENUMERATED  the family is flagged withdrawn and its encrypted PII erased,
+                     so the R&R module stops owing it Schedule heads and stops holding
+                     its name (`_withdraw_family`, Docs/rules.md C5)
 """
 
 from __future__ import annotations
 
 import uuid
-from datetime import date
+from datetime import date, datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -162,6 +172,7 @@ def _apply_reversal(db: Session, case: Case, event: Event, state: CaseState) -> 
         state.comp_paid_paise = max(
             0, int(state.comp_paid_paise or 0) - _int(payload.get("amount_paise"))
         )
+        _unwind_payment(db, case, target, state, event.occurred_at)
     elif target.type == ASSESSMENT_EVENT:
         state.comp_assessed_paise = _assessed_after_reversal(db, case.id, event.seq)
     elif target.type == "FAMILY_ENUMERATED":
@@ -172,6 +183,101 @@ def _apply_reversal(db: Session, case: Case, event: Event, state: CaseState) -> 
             state.families_displaced = max(
                 0, int(state.families_displaced or 0) - displaced
             )
+        _withdraw_family(db, payload)
+
+
+def _unwind_payment(
+    db: Session, case: Case, target: Event, state: CaseState, on: date
+) -> None:
+    """Put the money back on the award lines, and withdraw the closing event it bought.
+
+    Two things follow a withdrawn payment. The award lines are recomputed from the
+    payments that still stand (`compensation.service.recompute_allocations`), because a
+    line still reading `paid_paise = total` is what made the compensation screen and the
+    exported register report an unpaid award as settled in full.
+
+    And if the case had been closed out with COMPENSATION_PAID_FULL on the strength of
+    that payment, that marker is itself reversed — as the SYSTEM actor, so the ledger
+    says who withdrew it and why. Leaving it standing kept the s.38(1) COMPENSATION_3M
+    clock reading `closed` on a case with an outstanding award; the alternative,
+    deleting it, is not available to an append-only ledger (Docs/rules.md C1).
+    """
+    from app.domain.compensation.service import recompute_allocations
+
+    recompute_allocations(db, case)
+
+    assessed = int(state.comp_assessed_paise or 0)
+    if assessed <= 0 or int(state.comp_paid_paise or 0) >= assessed:
+        return
+
+    withdrawn = reversed_event_ids(db, case.id)
+    paid_full = db.scalar(
+        select(Event)
+        .where(
+            Event.case_id == case.id,
+            Event.type == "COMPENSATION_PAID_FULL",
+            Event.seq > target.seq,
+        )
+        .order_by(Event.seq.asc())
+        .limit(1)
+    )
+    if paid_full is None or paid_full.id in withdrawn:
+        return
+
+    from app.domain.events.service import append_event
+    from app.domain.rules.clocks import system_user
+
+    append_event(
+        db,
+        case,
+        REVERSAL_EVENT,
+        on,
+        system_user(db).id,
+        {
+            "reversed_event_id": str(paid_full.id),
+            "reason": "payment withdrawn",
+            "auto": True,
+        },
+        idempotency_key=f"unpaid:{case.id}:{paid_full.id}",
+        today=on,
+        system=True,
+    )
+
+
+def _withdraw_family(db: Session, payload: dict) -> None:
+    """Mark the enumerated family withdrawn and erase its PII.
+
+    The row stays — the ledger recorded that the family was enumerated, and the marker
+    that withdrew it — but it stops being an affected family: the register, the R&R
+    summary, the clock predicates and the dashboard counts all exclude it. Its
+    `persons_interested.pii_enc` is cleared, because a withdrawn enumeration is the one
+    record DPDP (Docs/rules.md C5) says to stop processing; the clear `masked_ref` is
+    kept so the withdrawal itself can still be read without a name.
+    """
+    from app.models import AffectedFamily, PersonInterested
+
+    family_id = payload.get("family_id")
+    try:
+        family = db.get(AffectedFamily, uuid.UUID(str(family_id)))
+    except (ValueError, TypeError):
+        return
+    if family is None or family.withdrawn_at is not None:
+        return
+    family.withdrawn_at = datetime.now(timezone.utc)
+    db.add(family)
+
+    person = (
+        db.get(PersonInterested, family.head_person_id)
+        if family.head_person_id
+        else None
+    )
+    if person is not None and person.pii_enc:
+        person.pii_enc = b""
+        flags = dict(person.consent_flags or {})
+        flags["pii_erased_on"] = datetime.now(timezone.utc).date().isoformat()
+        person.consent_flags = flags
+        db.add(person)
+    db.flush()
 
 
 def apply_event(
