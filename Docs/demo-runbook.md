@@ -42,6 +42,29 @@ Reset to pristine at any time: `make destroy && make demo` (≈2 min, re-seeds).
    CASE_LAPSED as the *system* actor, in the ledger, hash-chained. (Reset the demo
    date after, or `make destroy && make demo` before the next run.)
 
+## Stage-2 beats (add after step 5 if time allows — 60 seconds)
+
+7. **Family-level R&R** (differentiator #3): as `collector@demo`, open case
+   **LAQ/SEO/2024/07** → tab **R&R**. Families are masked (`Family SBU`), one column
+   per Second/Third Schedule head, statutory basis under every head. Click
+   **Reveal identities…** → type a purpose → names appear under an amber
+   "audited read" banner. *Say:* "Every identity read is recorded with the officer's
+   name and purpose — DPDP by construction; the ledger itself never carries a name."
+   (State/Ministry logins stay masked even with a purpose — APIs.md §2.)
+
+8. **State variation is a config diff**: as `ministry@demo` → nav **Rule-sets** →
+   **Compare** on the Maharashtra overlay. Three hunks: version, s.10A section,
+   escalation ladder. *Say:* "No fork, no release — the amendment is a file, and
+   existing cases stay pinned to the version they were opened under." (Overlay is
+   illustrative and marked *(verify)*.)
+
+9. **Traceable exports**: **Reports** → Cases register → CSV → download; the first line
+   is `# as_of_seq=N`, the card shows the sha256. *Say:* "Any figure on any slide can be
+   re-verified against the ledger sequence it was cut at."
+
+10. **Adapters, honestly**: `/admin/integrations` — six connectors behind real
+    interfaces, every badge says *mock*, "Test call" answers from the real ledger.
+
 ## One-liners that are true of the running system
 
 - "Nobody typed that declaration — the document is the event."
@@ -53,6 +76,10 @@ Reset to pristine at any time: `make destroy && make demo` (≈2 min, re-seeds).
   urgency invocation, 80%." (the gate refuses ₹0-assessed cases too)
 - "Tamper with a row in SQL and the integrity check fails; a nightly job
   re-verifies every chain." (Integrity tab on the case)
+- "R&R is tracked per family, per entitlement head, against the s.38(1) clocks —
+  six months monetary, eighteen infrastructural." (R&R tab)
+- "Names are decrypted only for a role with jurisdiction and a stated purpose, and
+  every such read is on the audit trail." (purpose dialog)
 
 ## Do not say (Key-Points.md)
 
