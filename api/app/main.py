@@ -59,6 +59,8 @@ from app.api.v1 import (  # noqa: E402
     parcels,
     projects,
     public,
+    reports,
+    rr,
 )
 
 PREFIX = "/api/v1"
@@ -70,6 +72,8 @@ app.include_router(parcels.router, prefix=PREFIX, tags=["parcels"])
 app.include_router(compensation.router, prefix=PREFIX, tags=["compensation"])
 app.include_router(alerts.router, prefix=PREFIX, tags=["alerts"])
 app.include_router(dashboards.router, prefix=PREFIX, tags=["dashboards"])
+app.include_router(rr.router, prefix=PREFIX, tags=["rr"])
+app.include_router(reports.router, prefix=PREFIX, tags=["reports"])
 app.include_router(public.router, prefix=PREFIX, tags=["public"])
 app.include_router(admin.router, prefix=PREFIX, tags=["admin"])
 

@@ -47,6 +47,8 @@ class Ruleset:
     clocks: list[ClockSpec]
     alerts: dict
     raw: dict
+    base_version: str | None = None  # set when this ruleset is an overlay on a base
+    overlay_title: str | None = None
 
     def allowed_event_types(self, stage: str) -> list[str]:
         allowed = list(self.stages.get(stage, []))
@@ -127,18 +129,77 @@ def rulesets_dir() -> Path:
     return p
 
 
+def _merge_overlay(base_doc: dict, overlay_doc: dict) -> dict:
+    """Base + overlay -> effective document (Docs/Backend.md §5: keys override or add).
+
+    stages: per-stage replace; transitions: per-event replace; clocks: replace by id,
+    append new ids; alerts: per-key replace one level down (thresholds/escalation).
+    """
+    merged = dict(base_doc)
+    merged["version"] = str(overlay_doc["version"])
+    for section in ("stages", "transitions"):
+        eff = dict(base_doc.get(section) or {})
+        eff.update(overlay_doc.get(section) or {})
+        merged[section] = eff
+    if overlay_doc.get("clocks"):
+        by_id = {c["id"]: c for c in (base_doc.get("clocks") or [])}
+        for c in overlay_doc["clocks"]:
+            by_id[c["id"]] = {**by_id.get(c["id"], {}), **c}
+        merged["clocks"] = list(by_id.values())
+    if overlay_doc.get("alerts"):
+        eff_alerts = {k: dict(v) if isinstance(v, dict) else v
+                      for k, v in (base_doc.get("alerts") or {}).items()}
+        for k, v in overlay_doc["alerts"].items():
+            if isinstance(v, dict) and isinstance(eff_alerts.get(k), dict):
+                eff_alerts[k].update(v)
+            else:
+                eff_alerts[k] = v
+        merged["alerts"] = eff_alerts
+    return merged
+
+
 def load_all_rulesets() -> dict[tuple[str, str], Ruleset]:
     _REGISTRY.clear()
     d = rulesets_dir()
+    docs: list[tuple[dict, str]] = []
     for f in sorted(d.rglob("*.yaml")):
         try:
-            doc = yaml.safe_load(f.read_text(encoding="utf-8"))
+            docs.append((yaml.safe_load(f.read_text(encoding="utf-8")), f.name))
+        except Exception:
+            log.exception("failed to read ruleset %s", f)
+    # Two passes: bases first, then overlays — file order must not matter.
+    for doc, name in docs:
+        if doc.get("overlay"):
+            continue
+        try:
             rs = _parse(doc)
             _REGISTRY[(rs.track, rs.version)] = rs
-            log.info("loaded ruleset %s@%s from %s", rs.track, rs.version, f.name)
+            log.info("loaded ruleset %s@%s from %s", rs.track, rs.version, name)
         except Exception:
-            log.exception("failed to load ruleset %s", f)
+            log.exception("failed to load ruleset %s", name)
+    for doc, name in docs:
+        if not doc.get("overlay"):
+            continue
+        try:
+            base = _REGISTRY.get((doc["track"], str(doc["base_version"])))
+            if base is None:
+                log.error("overlay %s: base %s@%s not loaded", name, doc.get("track"),
+                          doc.get("base_version"))
+                continue
+            rs = _parse(_merge_overlay(base.raw, doc))
+            rs.base_version = str(doc["base_version"])
+            rs.overlay_title = doc.get("title")
+            _REGISTRY[(rs.track, rs.version)] = rs
+            log.info("loaded overlay %s@%s (base %s) from %s", rs.track, rs.version,
+                     rs.base_version, name)
+        except Exception:
+            log.exception("failed to load overlay %s", name)
     return _REGISTRY
+
+
+def effective_yaml(rs: Ruleset) -> str:
+    """The merged document as YAML — what the admin diff viewer compares."""
+    return yaml.safe_dump(rs.raw, sort_keys=False, allow_unicode=True)
 
 
 def get_ruleset(track: str, version: str | None = None) -> Ruleset | None:
@@ -155,7 +216,11 @@ def get_ruleset(track: str, version: str | None = None) -> Ruleset | None:
         load_all_rulesets()
     if version:
         return _REGISTRY.get((track, version))
-    candidates = [rs for (t, _v), rs in _REGISTRY.items() if t == track]
+    # No pin -> the current BASE ruleset. Overlays are opt-in per case, never the
+    # default a new project silently lands on.
+    candidates = [
+        rs for (t, _v), rs in _REGISTRY.items() if t == track and rs.base_version is None
+    ]
     if not candidates:
         return None
     return sorted(candidates, key=lambda r: r.version)[-1]

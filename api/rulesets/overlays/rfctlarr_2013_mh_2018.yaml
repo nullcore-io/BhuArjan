@@ -1,0 +1,23 @@
+# Maharashtra overlay on RFCTLARR_2013 — ILLUSTRATIVE for the stage demo of
+# "state variation = config diff" (Docs/rules.md B5). Every substantive line is
+# marked *(verify)*: the domain owner must check it against the Right to Fair
+# Compensation ... (Maharashtra Amendment) Act 2018 before it is claimed as law.
+track: RFCTLARR_2013
+version: "2026.09-MH"
+overlay: true
+base_version: "2026.09"
+title: "Maharashtra Amendment 2018 overlay *(illustrative — verify)*"
+
+transitions:
+  # MH 2018 inserted s.10A: the State may exempt certain projects (linear
+  # infrastructure, vital projects) from SIA Chapter II/III. *(verify scope)*
+  SIA_EXEMPTED_S40:
+    from: PROPOSED
+    to: APPRAISED
+    section: "s.10A (Maharashtra Act 2018) *(verify)*"
+
+alerts:
+  escalation:
+    # Divisional Commissioner sits in the MH revenue escalation ladder between
+    # Collector and the State revenue department. *(illustrative)*
+    red: DIVISIONAL_COMMISSIONER

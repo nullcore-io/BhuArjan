@@ -15,10 +15,15 @@ export default function Layout() {
     : 0
   const demoDate = getDemoDate()
 
+  const roles: string[] = me?.roles ?? []
   const nav = [
     { to: '/national', label: 'National' },
     { to: '/projects', label: 'Projects' },
     { to: '/alerts', label: `Alerts${alertCount ? ` (${alertCount})` : ''}` },
+    { to: '/reports', label: 'Reports' },
+    ...(roles.includes('STATE_REVENUE') || roles.includes('MINISTRY') || roles.includes('AUDITOR')
+      ? [{ to: '/admin/rulesets', label: 'Rule-sets' }]
+      : []),
     { to: '/public', label: 'Public' },
   ]
 
