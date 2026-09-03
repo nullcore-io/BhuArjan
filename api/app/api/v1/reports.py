@@ -45,6 +45,18 @@ router = APIRouter()
 
 URL_TTL_SECONDS = 900  # 15 minutes — long enough to click through from the job reply
 
+# Docs/APIs.md §2. The two registers are case-level extracts — `cases_register` carries
+# case numbers and areas, `compensation_register` carries award lines with their
+# free-text `owner_ref` — so they go to the roles the matrix gives case-level reads.
+# RB is `—` there and `own` on dashboards, so a requiring body may run the aggregate
+# KPI export over its own projects and nothing else; without this gate it exported the
+# whole compensation register, owner references included.
+REGISTER_TEMPLATES = ("cases_register", "compensation_register")
+REGISTER_ROLES = {
+    "LAO", "CALA", "COLLECTOR", "ADMIN_RR", "STATE_REVENUE", "MINISTRY", "AUDITOR",
+}
+KPI_ROLES = REGISTER_ROLES | {"RB"}
+
 
 class ReportFilters(BaseModel):
     state: str | None = None
@@ -79,10 +91,18 @@ def create_report(
     db: Session = Depends(get_db),
     user: CurrentUser = Depends(get_current_user),
 ):
-    """Generate a report over the caller's jurisdiction and return its job."""
+    """Generate a report over the caller's jurisdiction and return its job.
+
+    Jurisdiction alone was the only gate here, so any authenticated role could export
+    the register its RBAC row denies it on screen. A role the §2 matrix does not give
+    this template to is a 404, like every other resource it may not see.
+    """
     template, fmt, filters = validate_request(
         body.template, body.format, body.filters.model_dump()
     )
+    allowed_roles = REGISTER_ROLES if template in REGISTER_TEMPLATES else KPI_ROLES
+    if not user.has_role(*allowed_roles):
+        raise not_found()
     today = get_effective_today(request)
     base = scoped_case_ids(db, user)
     case_ids = case_ids_for_filters(

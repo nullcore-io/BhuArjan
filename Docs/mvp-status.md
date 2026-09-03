@@ -33,15 +33,15 @@ R&R families module (F), integration adapters (J), report exports, district
 dashboards, admin rule-set diff viewer + Maharashtra overlay, and the four deferred
 statutory fixes. Test harness now runs in its own database (`bhuarjan_test`) with a
 per-process schema — five parallel lanes had been dropping each other's shared
-schema and silently writing into the demo data. 134 backend tests.
+schema and silently writing into the demo data. 159 backend tests.
 
 ## Known deferrals (ordered by likely judge interest)
 
 | Area | State | Note |
 |---|---|---|
 | Back-dated event rewinds clock projection | Done | Evaluation date is clamped to the case's frontier (`events/service.py::_evaluation_date`); a late-recorded payment cannot un-breach a clock. |
-| Un-lapse / reinstatement flow | Partial | `EVENT_REVERSED` is Collector-level, must name an event of the same case, and unwinds money projections (payment/assessment); it does not restore a stage, and compensation lines are not unwound alongside (`compensation/service.py`). |
-| R&R module (families, Second Schedule heads) | Done | Second/Third Schedule heads as data; enumeration + per-head delivery on the ledger; PII AES-GCM, masked by default, unlocked for Collector/Admin R&R with a purpose, every read audited. 9 families seeded. Case-page R&R tab with purpose dialog. Known coarse model: RR_MONETARY_6M closes on the first delivery to any family (per-family clocks later). |
+| Un-lapse / reinstatement flow | Partial | `EVENT_REVERSED` is Collector-level, must name an event of the same case, and unwinds money projections (payment/assessment), the award lines (`compensation/service.py::recompute_allocations`), a `COMPENSATION_PAID_FULL` the withdrawn payment bought, and the enumeration of a withdrawn family (row flagged, PII erased). It does not restore a stage, and reversing a reversal is refused with a 422 rather than silently doing nothing. |
+| R&R module (families, Second Schedule heads) | Done | Second/Third Schedule heads as data; enumeration + per-head delivery on the ledger; PII AES-GCM, masked by default, unlocked for Collector/Admin R&R with a purpose, every read audited. 9 families seeded. Case-page R&R tab with purpose dialog. The s.38(1) clocks close on a predicate over the whole census (`rules/predicates.py`), not on the first delivery: every applicable Schedule head, every family. |
 | Hindi i18n on case screens | Wiring only | Login/public/dashboard carry bilingual labels; case page + wizard are English. i18next is set up. |
 | UI role gating | Done (core) | Record = LAO/Collector/State; Extend = Collector/State; no-document path = Collector-level, enforced server-side too (rules.md C1). Finer per-screen gating remains. |
 | Top-risk table badge | Done | API now sends `level`/`elapsed_pct`; badge shows amber/red honestly. |
@@ -54,7 +54,7 @@ schema and silently writing into the demo data. 134 backend tests.
 | OCR for scanned PDFs | Not enabled | Text-layer PDFs extract; scanned → `ocr=true` warning, no proposal. |
 | OSM basemap tiles | Network | Leaflet CSS is bundled; tiles still fetch from OSM. Finale needs an offline tile pack (rules.md A4). |
 | Public rate limit | nginx-level | 60 req/min via `limit_req` in `web/nginx.conf`; API itself unthrottled. |
-| PII encryption plumbing | Done | `persons_interested.pii_enc` written/read via `app/core/crypto.py`; no PII in ledger payloads (tested). |
+| PII encryption plumbing | Done | `persons_interested.pii_enc` written/read via `app/core/crypto.py`; the key comes from `settings.PII_KEY` and the API refuses to start outside `DEMO_MODE` without a real 64-hex key; no PII in ledger payloads (tested). |
 | Ruleset version sort | Done | Natural numeric ordering (`2026.9` < `2026.10`); overlays never become the no-pin default. |
 
 ## Demo-day notes

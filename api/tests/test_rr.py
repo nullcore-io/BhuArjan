@@ -130,7 +130,9 @@ def test_the_register_is_masked_for_everyone_by_default(client, auth, world, not
     """No purpose, no name — whatever the caller's rank (Docs/rules.md C5)."""
     _enumerate(client, auth, notified_case, NAME_A, user=world.collector, displaced=True)
 
-    for who in (world.lao, world.collector, world.ministry_user):
+    # Ministry is deliberately absent: Docs/APIs.md §2 gives it 'aggregate' on this
+    # row, which is /rr/summary — the register itself is a 404 for it.
+    for who in (world.lao, world.collector):
         body = _families(client, auth, notified_case, user=who)
         assert body["pii"] == "masked", who
         assert body["total"] == 1
@@ -139,6 +141,8 @@ def test_the_register_is_masked_for_everyone_by_default(client, auth, world, not
         assert row["ref"] == "Family ZKA"  # initials only, per core.crypto.mask_name
         assert row["category"] == "agricultural landowner"
         assert row["displaced"] is True
+        # Caste is sensitive personal data: it is not on the masked row at all.
+        assert "sc_st" not in row
         assert NAME_A not in res_text(body)
         assert VILLAGE not in res_text(body)
         assert body["masked_reason"]
@@ -201,11 +205,12 @@ def test_an_lao_with_a_purpose_is_still_masked(client, auth, world, notified_cas
     assert "role" in body["masked_reason"]
 
 
-def test_admin_rr_unlocks_state_and_ministry_stay_masked(
+def test_admin_rr_unlocks_state_stays_masked_and_ministry_gets_the_aggregate_only(
     db, client, auth, world, notified_case
 ):
     """Docs/APIs.md §2: R&R PII is 'full (purpose)' for the Collector and the
-    Administrator R&R only; State Revenue and the Ministry see masked rows."""
+    Administrator R&R only; State Revenue sees masked rows; the Ministry's entry on
+    that row is 'aggregate', which is /rr/summary, not a masked family list."""
     _enumerate(client, auth, notified_case, NAME_A, user=world.collector)
     admin_rr = _user(db, "ADMIN_RR", world.district.id)
     state = _user(db, "STATE_REVENUE", world.state.id)
@@ -214,10 +219,22 @@ def test_admin_rr_unlocks_state_and_ministry_stay_masked(
     assert body["pii"] == "unlocked"
     assert body["items"][0]["head"]["name"] == NAME_A
 
-    for who, purpose in ((state, "state scrutiny"), (world.ministry_user, "national R&R review")):
-        body = _families(client, auth, notified_case, user=who, purpose=purpose)
-        assert body["pii"] == "masked", who.name
-        assert NAME_A not in res_text(body)
+    body = _families(client, auth, notified_case, user=state, purpose="state scrutiny")
+    assert body["pii"] == "masked"
+    assert NAME_A not in res_text(body)
+
+    denied = client.get(
+        f"/api/v1/cases/{notified_case.id}/families",
+        params={"purpose": "national R&R review"},
+        headers=auth(world.ministry_user),
+    )
+    assert denied.status_code == 404, denied.text
+    summary = client.get(
+        f"/api/v1/cases/{notified_case.id}/rr/summary",
+        headers=auth(world.ministry_user, "2025-03-01"),
+    )
+    assert summary.status_code == 200, summary.text
+    assert summary.json()["families"]["total"] == 1
 
 
 # --- enumeration -------------------------------------------------------------------
@@ -467,11 +484,13 @@ def test_the_summary_counts_heads_by_status_and_carries_the_s38_clocks(
     assert "verify current indexation" in by_head["house"]["amount"]
     assert by_head["resettlement_infrastructure"]["kind"] == "infra"
 
-    # s.38(1) and its proviso, both started by the award.
+    # s.38(1) and its proviso, both started by the award. Neither closes on a partial
+    # delivery: the obligation is per family and per head (see the R&R clock tests in
+    # tests/test_stage3_fixes.py).
     clocks = {c["clock_id"]: c for c in summary["clocks"]}
     assert set(clocks) == {"RR_MONETARY_6M", "RR_INFRA_18M"}
     assert clocks["RR_MONETARY_6M"]["basis"] == "s.38(1)"
-    assert clocks["RR_MONETARY_6M"]["status"] == "closed"  # the first delivery closes it
+    assert clocks["RR_MONETARY_6M"]["status"] == "running"
     assert clocks["RR_INFRA_18M"]["status"] == "running"
 
 

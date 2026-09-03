@@ -14,9 +14,10 @@ Three things happen here and nowhere else:
 
 2. **Delivery.** `RR_ENTITLEMENT_DELIVERED` flips one head of one family from `due` to
    `delivered` and appends the fact to the ledger with its evidence document. The
-   rule-set decides *when* that is legal — both shipped tracks put it on the
-   `POSSESSED` stage, because s.38(1) measures the R&R clocks from the award and
-   possession follows payment.
+   rule-set decides *when* that is legal — both shipped tracks allow it at `AWARDED`
+   and at `POSSESSED`, because s.38(1) measures the R&R periods from the *award*, and
+   its proviso requires the Third Schedule amenities to be in place *before*
+   displacement, so waiting for possession would make the proviso unrecordable.
 
 3. **Reading.** Every read is masked by default. Raw PII is returned only to a role
    with jurisdiction *and* a stated purpose, and every such read writes an
@@ -38,6 +39,7 @@ never touches the `events` table itself.
 
 from __future__ import annotations
 
+import logging
 import uuid
 from dataclasses import dataclass
 from datetime import date
@@ -80,6 +82,8 @@ MAX_LIMIT = 500
 
 FAMILY_ENUMERATED = "FAMILY_ENUMERATED"
 RR_ENTITLEMENT_DELIVERED = "RR_ENTITLEMENT_DELIVERED"
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -210,6 +214,20 @@ def family_view(
     *,
     unlock: bool = False,
 ) -> dict:
+    """One family, masked unless `unlock`.
+
+    `sc_st` is absent from the masked row. Caste is sensitive personal data under the
+    DPDP Act (Docs/rules.md C5) and Docs/APIs.md §2 releases family detail only to the
+    Collector and the Administrator R&R; a masked register that still published which
+    families are Scheduled Caste or Tribe gave away the one attribute the masking is
+    most for. `displaced` stays: it is what the R&R obligation turns on and it is the
+    reason the row exists.
+
+    A row whose ciphertext will not open is returned masked with `pii_error` rather
+    than raised: one undecryptable row (a stale restore, a half-finished re-key, a
+    tampered row) used to take the whole register down with an unhandled 500 at the
+    moment an officer needed a name, and to write no audit trail at all.
+    """
     entitlements = normalise_entitlements(family.rr_entitlements)
     flags = person.consent_flags if person is not None and isinstance(person.consent_flags, dict) else {}
     view = {
@@ -218,23 +236,80 @@ def family_view(
         "ref": masked_ref(person),
         "category": person.category if person is not None else None,
         "displaced": bool(family.displaced),
-        "sc_st": bool(person.sc_st) if person is not None else False,
         "enumerated_on": flags.get("enumerated_on"),
         "synthetic": bool(flags.get("synthetic")),
         "pii": "unlocked" if unlock else "masked",
         "entitlements": entitlements,
         **entitlement_rollup(entitlements),
     }
+    if unlock:
+        view["sc_st"] = bool(person.sc_st) if person is not None else False
     if unlock and person is not None:
-        view["head"] = decrypt_pii(person.pii_enc)
+        try:
+            view["head"] = decrypt_pii(person.pii_enc)
+        except Exception:
+            log.error(
+                "family %s: persons_interested.%s will not decrypt; returning the "
+                "masked row",
+                family.id, person.id,
+            )
+            view["pii"] = "masked"
+            view["pii_error"] = "undecryptable"
+            view.pop("sc_st", None)
     return view
 
 
 # --- enumeration -------------------------------------------------------------------
 
 
+def _enumeration_differences(
+    family: AffectedFamily,
+    person: PersonInterested | None,
+    *,
+    pii: dict,
+    category: str | None,
+    displaced: bool,
+    sc_st: bool,
+) -> list[str]:
+    """How a replayed enumeration differs from the family the key already bought.
+
+    Compared on the plaintext, after decrypt, so a retry that changes a guardian's name
+    or a village is caught as well as one that changes the head of the family. When the
+    ciphertext will not open (a withdrawn enumeration has had its PII erased), the
+    clear masked reference is compared instead — initials still separate one family
+    from another.
+    """
+    diffs: list[str] = []
+    if bool(family.displaced) != bool(displaced):
+        diffs.append(f"displaced {bool(family.displaced)} -> {bool(displaced)}")
+    stored_sc_st = bool(person.sc_st) if person is not None else False
+    if stored_sc_st != bool(sc_st):
+        diffs.append(f"sc_st {stored_sc_st} -> {bool(sc_st)}")
+    stored_category = (person.category if person is not None else None) or None
+    wanted_category = (str(category).strip() if category else None) or None
+    if stored_category != wanted_category:
+        diffs.append(f"category {stored_category!r} -> {wanted_category!r}")
+    if person is not None:
+        try:
+            stored_pii = decrypt_pii(person.pii_enc)
+        except Exception:
+            if masked_ref(person) != mask_name(pii):
+                diffs.append("head differs")
+        else:
+            if stored_pii != pii:
+                diffs.append("head differs")
+    return diffs
+
+
 def _replayed_enumeration(
-    db: Session, case: Case, idempotency_key: str | None
+    db: Session,
+    case: Case,
+    idempotency_key: str | None,
+    *,
+    pii: dict,
+    category: str | None,
+    displaced: bool,
+    sc_st: bool,
 ) -> Enumeration | None:
     """Answer a retried enumeration with the family the key already bought.
 
@@ -248,6 +323,14 @@ def _replayed_enumeration(
     `append_event`, which serialises on the case and answers the loser with the
     "key already used for a different request" validation error rather than a duplicate
     family — the safe end of the trade.
+
+    A key stands for one request, exactly as it does on `POST /cases/{id}/events`. The
+    key resolving to *a* family was once enough to answer 201 with it, so an officer who
+    reused a key for the next household got a 201 naming the first one: the second
+    family was never enumerated, never reached the ledger, and never entered the case's
+    R&R obligation — a silent statutory drop reported as a success. A replay whose body
+    describes a different family is now the same validation error the events endpoint
+    raises.
     """
     if not idempotency_key:
         return None
@@ -263,6 +346,24 @@ def _replayed_enumeration(
     if family is None:
         return None
     person = db.get(PersonInterested, family.head_person_id) if family.head_person_id else None
+
+    diffs = _enumeration_differences(
+        family, person, pii=pii, category=category, displaced=displaced, sc_st=sc_st
+    )
+    if diffs:
+        raise _validation_error(
+            "Idempotency-Key has already been used on this case for a different "
+            f"family ({'; '.join(diffs)}); use a fresh key to enumerate a new family",
+            errors=[
+                {
+                    "field": "Idempotency-Key",
+                    "message": "already used for a different request",
+                    "recorded_seq": existing.seq,
+                    "recorded_family_id": str(family.id),
+                }
+            ],
+        )
+
     state = db.get(CaseState, case.id)
     return Enumeration(
         family=family,
@@ -299,7 +400,15 @@ def enumerate_family(
     pii = _clean_pii(head)
     occurred = _parse_date(occurred_at, "occurred_at") or (today or ist_today())
 
-    replay = _replayed_enumeration(db, case, idempotency_key)
+    replay = _replayed_enumeration(
+        db,
+        case,
+        idempotency_key,
+        pii=pii,
+        category=category,
+        displaced=displaced,
+        sc_st=sc_st,
+    )
     if replay is not None:
         return replay
 
@@ -378,6 +487,15 @@ def deliver_entitlement(
     (Docs/rules.md C1).
     """
     from app.domain.events.service import append_event
+
+    if getattr(family, "withdrawn_at", None) is not None:
+        # A reversed enumeration is no longer an obligation (rules.md C5: stop
+        # processing); recording a delivery against it would recreate one.
+        raise Problem(
+            "validation_error", "Validation error", 422,
+            "this family's enumeration was withdrawn (EVENT_REVERSED); "
+            "re-enumerate the family before recording a delivery",
+        )
 
     head = str(head or "").strip()
     if not is_head(head):
@@ -471,15 +589,25 @@ def list_families(
     purpose: str | None = None,
     actor_id: uuid.UUID | None = None,
 ) -> dict:
-    """Families of one case, masked unless `unlock`. Ordered and paged by family id."""
+    """Families of one case, masked unless `unlock`. Ordered and paged by family id.
+
+    A family whose FAMILY_ENUMERATED has been reversed is not in the register: the
+    enumeration was withdrawn, so the household is not an affected family and the case
+    owes it no Schedule head (see `app.domain.cases.projections._withdraw_family`).
+    """
     limit = max(1, min(int(limit or DEFAULT_LIMIT), MAX_LIMIT))
 
-    q = select(AffectedFamily).where(AffectedFamily.case_id == case.id)
+    q = select(AffectedFamily).where(
+        AffectedFamily.case_id == case.id, AffectedFamily.withdrawn_at.is_(None)
+    )
     total = int(
         db.scalar(
             select(func.count())
             .select_from(AffectedFamily)
-            .where(AffectedFamily.case_id == case.id)
+            .where(
+                AffectedFamily.case_id == case.id,
+                AffectedFamily.withdrawn_at.is_(None),
+            )
         )
         or 0
     )
@@ -507,8 +635,12 @@ def list_families(
     items = []
     for family in rows:
         person = people.get(family.head_person_id)
-        items.append(family_view(family, person, unlock=unlock))
-        if unlock and person is not None:
+        view = family_view(family, person, unlock=unlock)
+        items.append(view)
+        # Only a row whose name actually left the server is audited: a row that failed
+        # to decrypt disclosed nothing, and filing a PII_READ for it would put a read
+        # that never happened into the register an investigator reads.
+        if unlock and person is not None and not view.get("pii_error"):
             audit_pii_read(db, actor_id, family, purpose or "", list(PII_FIELDS), case)
 
     return {
@@ -524,7 +656,12 @@ def list_families(
 def rr_summary(db: Session, case: Case, today: date) -> dict:
     """Heads × status counts for the case, plus the s.38 R&R clocks (APIs.md §3.8)."""
     families = list(
-        db.scalars(select(AffectedFamily).where(AffectedFamily.case_id == case.id)).all()
+        db.scalars(
+            select(AffectedFamily).where(
+                AffectedFamily.case_id == case.id,
+                AffectedFamily.withdrawn_at.is_(None),
+            )
+        ).all()
     )
     people = {
         p.id: p

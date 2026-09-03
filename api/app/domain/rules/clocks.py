@@ -7,7 +7,8 @@ For every `ClockSpec` in the case's pinned rule-set:
             overridden by the latest EXTENSION_GRANTED `new_due_date`
             + suspended_days accumulated from vacated court stays
 
-    closed     the `ends_on` event exists with occurred_at <= min(today, due)
+    closed     the `ends_on` event exists with occurred_at <= min(today, due), or the
+               `ends_when` predicate (app.domain.rules.predicates) is satisfied by then
     suspended  a COURT_STAY affecting this clock has no matching STAY_VACATED
     breached   today > due, and `on_breach` only marks
     lapsed     today > due, and `on_breach` emits consequence events
@@ -328,10 +329,18 @@ def _clock_dict(row: Clock, spec: ClockSpec | None = None) -> dict:
 
 
 def _evaluate_once(db: Session, case: Case, rs: Ruleset, today: date) -> tuple[list[dict], bool]:
+    from app.domain.cases.projections import reversed_event_ids
+    from app.domain.rules.predicates import evaluate_predicate
+
     events = _load_events(db, case.id)
     by_type: dict[str, list[Event]] = defaultdict(list)
     for ev in events:
         by_type[ev.type].append(ev)
+    # An event an EVENT_REVERSED has withdrawn is not a fact any more, so it cannot
+    # close a clock: a COMPENSATION_PAID_FULL left standing after its payment was
+    # reversed kept the s.38(1) COMPENSATION_3M clock reading `closed` on a case with
+    # nothing paid.
+    withdrawn = reversed_event_ids(db, case.id)
 
     rows = {
         row.clock_id: row
@@ -354,7 +363,11 @@ def _evaluate_once(db: Session, case: Case, rs: Ruleset, today: date) -> tuple[l
         due = (extension_due or base_due) + timedelta(days=suspended_days)
 
         closing = (
-            [e for e in by_type.get(spec.ends_on, []) if e.occurred_at <= today]
+            [
+                e
+                for e in by_type.get(spec.ends_on, [])
+                if e.occurred_at <= today and e.id not in withdrawn
+            ]
             if spec.ends_on
             else []
         )
@@ -365,6 +378,16 @@ def _evaluate_once(db: Session, case: Case, rs: Ruleset, today: date) -> tuple[l
         # statutory consequence.
         in_time = [e for e in closing if e.occurred_at <= due]
 
+        # `ends_when` closes on a state of the case rather than on one event — the R&R
+        # obligation is per family per head, so no single event discharges it. The
+        # in-time rule is the same: the date the obligation was actually completed must
+        # fall on or before the due date.
+        satisfied_on = None
+        if spec.ends_when:
+            satisfied, when = evaluate_predicate(spec.ends_when, db, case, today)
+            if satisfied and when is not None and when <= due:
+                satisfied_on = when
+
         status = "running"
         closed_on = None
         closed_seq = None
@@ -372,6 +395,9 @@ def _evaluate_once(db: Session, case: Case, rs: Ruleset, today: date) -> tuple[l
             status = "closed"
             closed_on = in_time[0].occurred_at
             closed_seq = in_time[0].seq
+        elif satisfied_on is not None:
+            status = "closed"
+            closed_on = satisfied_on
         elif spec.kind == "window" and today > due:
             # A public window simply expires. Nobody is in default; no alert.
             status = "closed"

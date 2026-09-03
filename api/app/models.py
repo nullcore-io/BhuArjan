@@ -160,6 +160,15 @@ class AffectedFamily(Base):
     head_person_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("persons_interested.id"), nullable=True)
     displaced: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     rr_entitlements: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # Set when the FAMILY_ENUMERATED that created this row is reversed. The row itself
+    # stays — the ledger recorded that it existed — but it stops being an affected
+    # family everywhere: registers, R&R summaries, clock predicates and dashboard
+    # counts all exclude it, and its `persons_interested.pii_enc` is erased, because a
+    # withdrawn enumeration is exactly the record DPDP says to stop processing
+    # (Docs/rules.md C5).
+    withdrawn_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
 
 # ---- projections (rebuildable) ----

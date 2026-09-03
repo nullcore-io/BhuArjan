@@ -86,14 +86,19 @@ clocks:
     duration: { months: 3 }
     basis: "s.38(1)"
     consequence: "Possession cannot be taken; interest accrues"
+  # The R&R obligation is per family and per Schedule head, so no single event closes
+  # either clock: `ends_on: RR_ENTITLEMENT_DELIVERED` reported statutory compliance the
+  # moment one allowance reached one family. `ends_when` names a predicate in
+  # app/domain/rules/predicates.py that asks the whole census instead.
   - id: RR_MONETARY_6M
     starts_on: AWARD_S23
-    ends_on: RR_ENTITLEMENT_DELIVERED
+    ends_when: rr_monetary_complete
     duration: { months: 6 }
     basis: "s.38(1)"
     consequence: "Monetary R&R overdue"
   - id: RR_INFRA_18M
     starts_on: AWARD_S23
+    ends_when: rr_infra_complete
     duration: { months: 18 }
     basis: "s.38(1) proviso"
     consequence: "Infrastructural R&R overdue"
