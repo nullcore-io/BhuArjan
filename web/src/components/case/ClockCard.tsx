@@ -192,7 +192,7 @@ export function ExtendClockModal({
         aria-labelledby="extend-title"
         className="card mt-12 w-full max-w-lg shadow-none"
       >
-        <h2 id="extend-title" className="text-base font-bold">
+        <h2 id="extend-title" className="text-base font-semibold">
           Extend {titleize(clock.clock_id)}
         </h2>
         <p className="mt-1 text-xs text-muted">
@@ -294,7 +294,7 @@ export function ExtendClockModal({
                 </ul>
               ) : null}
               {problem?.ruleset_ref ? (
-                <p className="mt-1 font-mono text-[11px]">{String(problem.ruleset_ref)}</p>
+                <p className="mt-1 font-mono text-xs">{String(problem.ruleset_ref)}</p>
               ) : null}
             </div>
           ) : null}

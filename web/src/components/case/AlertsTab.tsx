@@ -92,7 +92,7 @@ export default function AlertsTab({
           })}
         </tbody>
       </table>
-      <p className="mt-2 text-[11px] text-muted">
+      <p className="mt-2 text-xs text-muted">
         Escalation ladder per Docs/rules.md C2: amber → LAO, red → Collector, breach → State,
         lapse → Ministry. Acknowledge from the Alert centre.
       </p>

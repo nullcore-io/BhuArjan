@@ -33,3 +33,7 @@ coverage/
 # QA artifacts
 .playwright-mcp/
 *.tsbuildinfo
+e2e/screens/
+e2e/.artifacts/
+playwright-report/
+web/.devserver.log

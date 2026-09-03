@@ -84,7 +84,7 @@ export default function ParcelMap({
   return (
     <section className="card" aria-labelledby="map-h">
       <div className="flex items-baseline justify-between gap-2">
-        <h2 id="map-h" className="text-sm font-bold uppercase tracking-wide text-muted">
+        <h2 id="map-h" className="text-sm font-semibold uppercase tracking-wide text-muted">
           Parcels
         </h2>
         <span className="text-xs text-muted">
@@ -142,7 +142,7 @@ export default function ParcelMap({
             </MapContainer>
           </div>
 
-          <ul className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px]">
+          <ul className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs">
             {legend.map(([key, count]) => {
               const s = STATUS_STYLE[key] ?? UNKNOWN
               return (
@@ -164,7 +164,7 @@ export default function ParcelMap({
           </ul>
 
           {selected ? (
-            <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 rounded border border-accent bg-accent/5 p-2 text-[11px]">
+            <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 rounded border border-accent bg-accent/5 p-2 text-xs">
               <Pair label="Survey no" value={selected.survey_no ?? '—'} />
               <Pair label="ULPIN" value={selected.ulpin ?? '—'} mono />
               <Pair label="Area (ha)" value={selected.area_ha != null ? String(selected.area_ha) : '—'} />
@@ -194,7 +194,7 @@ export default function ParcelMap({
                       return (
                         <tr key={String(f.id ?? i)}>
                           <td>{p.survey_no ?? '—'}</td>
-                          <td className="font-mono text-[11px]">{p.ulpin ?? '—'}</td>
+                          <td className="font-mono text-xs">{p.ulpin ?? '—'}</td>
                           <td>{(p.village as string) ?? '—'}</td>
                           <td className="text-right tabular-nums">
                             {p.area_ha != null ? num(p.area_ha).toFixed(4) : '—'}

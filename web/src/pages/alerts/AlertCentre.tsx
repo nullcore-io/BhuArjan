@@ -121,7 +121,7 @@ export default function AlertCentre() {
     <div className="flex flex-col gap-4">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-lg font-bold text-ink">
+          <h1 className="text-lg font-semibold text-ink">
             Alert centre <span className="font-normal text-muted">/ अलर्ट केंद्र</span>
           </h1>
           <p className="text-xs text-muted">
@@ -133,7 +133,7 @@ export default function AlertCentre() {
 
         <div className="flex flex-wrap items-end gap-2">
           <label className="flex flex-col gap-0.5">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted">
+            <span className="text-xs font-semibold uppercase tracking-wide text-muted">
               Level
             </span>
             <select
@@ -173,9 +173,9 @@ export default function AlertCentre() {
           >
             <span className="flex flex-col gap-1">
               <LevelChip level={l} />
-              <span className="text-[11px] text-muted">escalates to {ESCALATION[l]}</span>
+              <span className="text-xs text-muted">escalates to {ESCALATION[l]}</span>
             </span>
-            <span className="text-2xl font-bold tabular-nums text-ink">
+            <span className="text-2xl font-semibold tabular-nums text-ink">
               {formatCount(counts[l] ?? 0)}
             </span>
           </button>
@@ -233,13 +233,13 @@ export default function AlertCentre() {
                         ) : (
                           a.case_no || '—'
                         )}
-                        <div className="max-w-[16rem] truncate text-[11px] text-muted">
+                        <div className="max-w-[16rem] truncate text-xs text-muted">
                           {a.project || a.project_name || ''}
                         </div>
                       </td>
                       <td className="max-w-[22rem]">
                         <div className="font-medium">{titleize(a.clock_id)}</div>
-                        <div className="text-[11px] text-muted">
+                        <div className="text-xs text-muted">
                           {a.basis ? <span className="font-semibold">{a.basis} · </span> : null}
                           {a.consequence || 'Consequence not recorded in the rule-set'}
                         </div>
@@ -285,7 +285,7 @@ export default function AlertCentre() {
         )
       ) : null}
 
-      <p className="text-[11px] text-muted">
+      <p className="text-xs text-muted">
         Acknowledgement records <code>acknowledged_by</code> against the alert and is
         written to the administrative audit trail. It does not extend, suspend or close
         the statutory clock — only an <code>EXTENSION_GRANTED</code> or a terminating

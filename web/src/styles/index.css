@@ -2,33 +2,190 @@
 @tailwind components;
 @tailwind utilities;
 
+/**
+ * Component layer — implements Docs/design.md §3.
+ *
+ * Note the surface model (design.md §1): the PAGE is white (--bg) and CARDS are
+ * the tinted plane (--surface). This is the inverse of the earlier build.
+ */
+
+/* ------------------------------------------------------------------ base -- */
+
+/* Text-size control (A- / A / A+). Tailwind's scale is rem-based, so scaling
+   the root scales the whole UI without any component knowing about it. */
+html {
+  font-size: 16px;
+}
+html[data-textsize='sm'] {
+  font-size: 14px;
+}
+html[data-textsize='lg'] {
+  font-size: 18px;
+}
+
 body {
   @apply bg-surface text-ink font-sans text-sm;
+  -webkit-font-smoothing: antialiased;
 }
 
-.card {
-  @apply bg-bg border border-border rounded p-4;
+/**
+ * DEVIATION 3 — design.md §3 asks for a 2px accent focus ring at 40% opacity.
+ * At 40% over white that measures ~2.1:1, under the 3:1 WCAG 2.1 requires of a
+ * focus indicator, so the ring is solid. §5's AA mandate outranks §3's opacity.
+ */
+@layer base {
+  :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+    @apply outline-none ring-2 ring-accent ring-offset-2 ring-offset-bg;
+  }
 }
 
-.btn {
-  @apply inline-flex items-center gap-1 rounded border border-border bg-bg px-3 py-1.5 text-sm font-medium hover:bg-surface disabled:opacity-50 disabled:cursor-not-allowed;
+html[data-contrast='high'] .card,
+html[data-contrast='high'] table.gov th,
+html[data-contrast='high'] table.gov td {
+  @apply border-breached;
+}
+html[data-contrast='high'] .text-muted,
+html[data-contrast='high'] .text-hint {
+  color: #1b1b1b !important;
 }
 
-.btn-primary {
-  /* not `@apply btn ...` — the expansion re-applies btn's white background last */
-  @apply inline-flex items-center gap-1 rounded border border-accent bg-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-[#173c78] disabled:opacity-50 disabled:cursor-not-allowed;
+.sr-only-focusable {
+  @apply sr-only;
+}
+.sr-only-focusable:focus {
+  @apply not-sr-only fixed left-4 top-4 z-50 rounded border border-accent bg-bg px-3 py-2 text-sm font-semibold text-accent;
 }
 
-.badge {
-  @apply inline-block rounded px-2 py-0.5 text-xs font-semibold;
+/* ------------------------------------------------------------ components -- */
+
+@layer components {
+  /* Cards: a white plane lifted off the tinted page. The border is a hairline
+     that only does work at high contrast / forced colours; the elevation is
+     what actually separates card from ground. */
+  .card {
+    @apply rounded-card border border-border bg-bg shadow-card;
+  }
+
+  .card-head {
+    @apply flex items-center justify-between gap-3 border-b border-border px-5 py-3;
+  }
+
+  /* Standard interior padding — design.md §3 asks 16–24px; this is 20. */
+  .card-body {
+    @apply p-5;
+  }
+
+  /* §3 Buttons. One primary per screen; everything else secondary or ghost. */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-1.5 rounded border border-accent bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:border-accent-hover hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  /* Secondary — outline accent on a transparent fill. `.btn` is the legacy
+     name used across the app, so it maps here rather than to a third style. */
+  .btn,
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-1.5 rounded border border-accent bg-transparent px-4 py-2 text-sm font-medium text-accent transition-colors hover:bg-accent/5 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-1.5 rounded border border-transparent bg-transparent px-2 py-1 text-sm font-medium text-muted transition-colors hover:bg-surface2 hover:text-ink disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-1.5 rounded border border-red bg-red px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#8C1D18] disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .btn-sm {
+    @apply px-2.5 py-1 text-xs;
+  }
+
+  /* §3 Status chips — pale tint + dark text of the SAME hue, never grey on a
+     colour. Tone classes live in components/ui/StatBadge.tsx. */
+  .badge {
+    @apply inline-block rounded-sm px-2 py-0.5 text-xs font-medium leading-5;
+  }
+
+  /* §3 Forms — visible labels always, never placeholder-as-label. */
+  .field {
+    @apply w-full rounded border border-strong bg-bg px-3 py-2 text-sm text-ink transition-colors placeholder:text-hint hover:border-muted/40 disabled:bg-surface2 disabled:text-hint;
+  }
+
+  .label {
+    @apply mb-1 block text-xs font-medium uppercase text-muted;
+  }
+
+  /* Required marker — §3 asks required fields to carry an asterisk. */
+  .label-required::after {
+    content: ' *';
+    @apply text-red;
+  }
+
+  /* Inline field error: a specific cause and fix, never "Invalid input". */
+  .field-error {
+    @apply mt-1 block text-xs text-red;
+  }
+
+  .section-title {
+    @apply text-base font-semibold text-ink;
+  }
 }
+
+/* ---------------------------------------------------------------- tables -- */
 
 table.gov {
   @apply w-full border-collapse text-sm;
 }
 table.gov th {
-  @apply border-b border-border bg-surface px-2 py-1.5 text-left font-semibold text-muted;
+  /* §2: table headers are 500 medium, not semibold. */
+  @apply border-b border-border bg-surface2 px-3 py-2 text-left text-xs font-medium uppercase text-muted;
 }
 table.gov td {
-  @apply border-b border-border px-2 h-9;
+  @apply h-rowlg border-b border-border px-3 align-middle;
+}
+
+/* Opt back into 36px rows where scanning volume beats comfort. */
+table.gov.dense th {
+  @apply px-2 py-1.5;
+}
+table.gov.dense td {
+  @apply h-row px-2;
+}
+table.gov tbody tr:hover td {
+  @apply bg-surface2;
+}
+table.gov tbody tr:last-child td {
+  @apply border-b-0;
+}
+
+/* §2/§3 — numeric columns right-aligned on tabular figures so digits line up
+   and rows do not reflow as live values change during the demo. */
+table.gov .num {
+  @apply text-right;
+  font-variant-numeric: tabular-nums;
+}
+
+table.gov.sticky-head th {
+  @apply sticky top-0 z-10;
+}
+
+/* Sortable headers carry aria-sort; show the direction visually too. */
+table.gov th[aria-sort='ascending']::after {
+  content: ' ▲';
+}
+table.gov th[aria-sort='descending']::after {
+  content: ' ▼';
+}
+
+/* ----------------------------------------------------------------- print -- */
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body {
+    @apply bg-bg text-xs;
+  }
+  .card {
+    break-inside: avoid;
+  }
 }

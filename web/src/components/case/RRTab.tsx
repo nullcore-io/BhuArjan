@@ -280,10 +280,10 @@ export default function RRTab({ caseId, stage }: { caseId: string; stage?: strin
           <p className="text-xs font-semibold uppercase tracking-wide text-muted">
             R&amp;R progress · Second/Third Schedule
           </p>
-          <p className="mt-0.5 text-base font-bold tabular-nums text-ink">
+          <p className="mt-0.5 text-base font-semibold tabular-nums text-ink">
             {progress == null ? '—' : `${Number(progress).toFixed(1)}%`}
           </p>
-          <p className="mt-0.5 text-[11px] text-muted">
+          <p className="mt-0.5 text-xs text-muted">
             {summary?.as_of_seq != null ? `As of seq ${summary.as_of_seq}` : 'As of seq —'}
             {summary?.as_of_date ? ` · ${formatDate(summary.as_of_date)}` : ''}
           </p>
@@ -309,7 +309,7 @@ export default function RRTab({ caseId, stage }: { caseId: string; stage?: strin
           >
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div>
-                <p className="font-bold">Audited read — identities revealed</p>
+                <p className="font-semibold">Audited read — identities revealed</p>
                 <p className="mt-0.5">{AUDIT_NOTICE}.</p>
                 {page?.purpose || purpose ? (
                   <p className="mt-0.5">
@@ -331,13 +331,13 @@ export default function RRTab({ caseId, stage }: { caseId: string; stage?: strin
             <button type="button" className="btn text-xs" onClick={() => setAsking(true)}>
               Reveal identities…
             </button>
-            <span className="text-[11px] text-muted">
+            <span className="text-xs text-muted">
               Names are decrypted only for a role with jurisdiction and a stated purpose
               (Docs/rules.md C5). {AUDIT_NOTICE}.
             </span>
           </div>
         ) : (
-          <p className="text-[11px] text-muted">
+          <p className="text-xs text-muted">
             Masked register. {page?.masked_reason ??
               'Names are released to Collector, Administrator R&R and State Revenue only, and only against a stated purpose (Docs/rules.md C5).'}
           </p>
@@ -365,7 +365,7 @@ export default function RRTab({ caseId, stage }: { caseId: string; stage?: strin
                 <th key={h.head} scope="col" title={headTitle(h)} className="whitespace-nowrap">
                   {headShort(h)}
                   {h.basis ? (
-                    <span className="block font-normal normal-case text-[10px] text-muted">
+                    <span className="block font-normal normal-case text-xs text-muted">
                       {shortBasis(h.basis)}
                     </span>
                   ) : null}
@@ -406,7 +406,7 @@ export default function RRTab({ caseId, stage }: { caseId: string; stage?: strin
                       {name ? (
                         <>
                           <span className="font-semibold text-ink">{name}</span>
-                          <span className="block text-[11px] text-muted">
+                          <span className="block text-xs text-muted">
                             {[
                               textField(f.head, 'guardian'),
                               textField(f.head, 'village'),
@@ -419,7 +419,7 @@ export default function RRTab({ caseId, stage }: { caseId: string; stage?: strin
                           </span>
                         </>
                       ) : (
-                        <span className="font-mono text-[12px]">{f.ref || '—'}</span>
+                        <span className="font-mono text-xs">{f.ref || '—'}</span>
                       )}
                       {f.synthetic ? (
                         <span
@@ -457,14 +457,14 @@ export default function RRTab({ caseId, stage }: { caseId: string; stage?: strin
                         <td key={h.head} className="whitespace-nowrap align-top">
                           <span className={`badge ${view.cls}`}>{view.label}</span>
                           {cell?.delivered_on ? (
-                            <span className="block text-[11px] text-muted">
+                            <span className="block text-xs text-muted">
                               {formatDate(cell.delivered_on)}
                             </span>
                           ) : null}
                           {state !== 'delivered' && mayDeliver ? (
                             <button
                               type="button"
-                              className="btn mt-1 px-2 py-0.5 text-[11px]"
+                              className="btn mt-1 px-2 py-0.5 text-xs"
                               onClick={() => setDelivering({ family: f, head: h })}
                             >
                               Deliver…
@@ -482,7 +482,7 @@ export default function RRTab({ caseId, stage }: { caseId: string; stage?: strin
       </div>
 
       {page?.next_cursor ? (
-        <p className="mt-2 text-[11px] text-muted">
+        <p className="mt-2 text-xs text-muted">
           Showing the first 200 families of {countText(page.total)}. The register is paged
           (Docs/APIs.md §1); narrow by village on the parcels screen for larger cases.
         </p>
@@ -506,10 +506,10 @@ export default function RRTab({ caseId, stage }: { caseId: string; stage?: strin
               {heads.map((h) => (
                 <tr key={h.head}>
                   <td>{h.label || titleize(h.head)}</td>
-                  <td className="text-[11px] text-muted">{h.basis || '—'}</td>
+                  <td className="text-xs text-muted">{h.basis || '—'}</td>
                   <td className="text-right tabular-nums">{countText(headCount(h, 'delivered'))}</td>
                   <td className="text-right tabular-nums">{countText(headCount(h, 'due'))}</td>
-                  <td className="whitespace-nowrap text-[11px]">
+                  <td className="whitespace-nowrap text-xs">
                     {titleize(rrClockIdFor(h))}
                     {overdue.has(h.head) ? (
                       <span className="ml-1 badge border border-red bg-red/10 text-[#8C1D18]">
@@ -524,14 +524,14 @@ export default function RRTab({ caseId, stage }: { caseId: string; stage?: strin
         </div>
       ) : null}
 
-      <p className="mt-2 text-[11px] text-muted">
+      <p className="mt-2 text-xs text-muted">
         {summary?.schedule_note ??
           'Statuses only — Second Schedule amounts are as notified by the appropriate Government and revised by indexation, so no rupee figure is held here (verify current values).'}{' '}
         “Overdue” is not a stored status: a head still due after its own s.38(1) clock has
         breached — monetary R&amp;R 6 months, infrastructural R&amp;R 18 months — is shown as
         overdue on this screen.
       </p>
-      <p className="mt-1 text-[11px] text-muted">
+      <p className="mt-1 text-xs text-muted">
         Every identity read is written to the audit trail with the reader and the purpose
         (Docs/rules.md C5, DPDP Act 2023); the ledger itself never carries a name.
       </p>
@@ -564,7 +564,7 @@ function RRClocks({ clocks }: { clocks: Clock[] }) {
   if (!clocks.length) return null
   return (
     <section className="mt-3 rounded border border-border bg-surface p-2" aria-labelledby="rr-clocks-h">
-      <h3 id="rr-clocks-h" className="text-xs font-bold uppercase tracking-wide text-muted">
+      <h3 id="rr-clocks-h" className="text-xs font-semibold uppercase tracking-wide text-muted">
         R&amp;R timelines · s.38(1) proviso
       </h3>
       <ul className="mt-2 grid gap-2 sm:grid-cols-2">
@@ -576,13 +576,13 @@ function RRClocks({ clocks }: { clocks: Clock[] }) {
                 <span className="font-semibold text-ink">{titleize(c.clock_id)}</span>
                 <span className={`badge ${meta.chip}`}>{meta.label}</span>
               </div>
-              <p className="mt-0.5 text-[11px] text-muted">
+              <p className="mt-0.5 text-xs text-muted">
                 {c.basis ? `${c.basis} · ` : ''}
                 {formatDate(c.start_date)} <span aria-hidden="true">→</span>{' '}
                 <span className="sr-only">to</span>
                 <span className="font-semibold text-ink">{formatDate(c.due_date)}</span>
               </p>
-              {c.consequence ? <p className="mt-0.5 text-[11px] text-ink">{c.consequence}</p> : null}
+              {c.consequence ? <p className="mt-0.5 text-xs text-ink">{c.consequence}</p> : null}
             </li>
           )
         })}
@@ -632,7 +632,7 @@ function PurposeDialog({
           if (valid) onConfirm(text.trim())
         }}
       >
-        <h2 id="purpose-title" className="text-base font-bold">
+        <h2 id="purpose-title" className="text-base font-semibold">
           Reveal affected-family identities
         </h2>
         <p
@@ -662,7 +662,7 @@ function PurposeDialog({
           />
         </label>
         {!valid && text.length > 0 ? (
-          <p className="mt-1 text-[11px] text-[#8A5300]">
+          <p className="mt-1 text-xs text-[#8A5300]">
             Give a purpose an auditor could read back — at least a few words.
           </p>
         ) : null}
@@ -755,7 +755,7 @@ function DeliverModal({
           if (deliveredOn) mutation.mutate()
         }}
       >
-        <h2 id="deliver-title" className="text-base font-bold">
+        <h2 id="deliver-title" className="text-base font-semibold">
           Record delivery — {head.label || titleize(head.head)}
         </h2>
         <p className="mt-1 text-xs text-muted">
@@ -764,7 +764,7 @@ function DeliverModal({
           <span className="font-mono"> RR_ENTITLEMENT_DELIVERED</span> to the case ledger; the
           date below is the legal date of delivery.
         </p>
-        <p className="mt-1 text-[11px] text-muted">
+        <p className="mt-1 text-xs text-muted">
           The rule-set decides from which stage a delivery may be recorded — both shipped tracks
           put it on <span className="font-mono">POSSESSED</span>, because s.38(1) measures the R&amp;R
           clocks from the award and possession follows payment. A refusal below is the rule-set
@@ -821,7 +821,7 @@ function DeliverModal({
               </ul>
             ) : null}
             {problem?.ruleset_ref ? (
-              <p className="mt-1 font-mono text-[11px]">{String(problem.ruleset_ref)}</p>
+              <p className="mt-1 font-mono text-xs">{String(problem.ruleset_ref)}</p>
             ) : null}
           </div>
         ) : null}
@@ -846,7 +846,7 @@ function Tile({ label, value, tone }: { label: string; value: string; tone?: 'ok
     <div className="min-w-[9rem] flex-1 rounded border border-border bg-surface p-2">
       <p className="text-xs uppercase tracking-wide text-muted">{label}</p>
       <p
-        className={`mt-0.5 text-base font-bold tabular-nums ${
+        className={`mt-0.5 text-base font-semibold tabular-nums ${
           tone === 'amber' ? 'text-[#8A5300]' : tone === 'ok' ? 'text-[#1B5E20]' : 'text-ink'
         }`}
       >

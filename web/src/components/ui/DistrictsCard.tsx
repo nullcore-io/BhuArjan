@@ -167,7 +167,7 @@ export default function DistrictsCard({ rows = [] }: { rows?: unknown[] }) {
               )
             })}
           </ul>
-          <p className="mt-2 text-[11px] text-muted">
+          <p className="mt-2 text-xs text-muted">
             A district dashboard resolves its scope by name, LGD code or id
             (Docs/APIs.md §3.10) and re-computes every figure over that district's
             cases — it is not a client-side filter of this page.

@@ -51,7 +51,7 @@ export default function Drawer({
       >
         <div className="flex items-start justify-between gap-4 border-b border-border bg-surface px-4 py-3">
           <div>
-            <h2 className="text-base font-bold text-ink">{title}</h2>
+            <h2 className="text-base font-semibold text-ink">{title}</h2>
             {subtitle ? <div className="text-xs text-muted">{subtitle}</div> : null}
           </div>
           <button

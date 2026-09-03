@@ -65,7 +65,7 @@ export default function AdminIntegrations() {
   return (
     <div className="space-y-3">
       <header className="card">
-        <h1 className="text-lg font-bold text-ink">Integrations</h1>
+        <h1 className="text-lg font-semibold text-ink">Integrations</h1>
         <p className="mt-1 text-sm text-muted">
           Six adapters sit behind real interfaces (Docs/APIs.md §4). In this build every one of
           them is a mock, and this screen says so — the badge is read from the adapter itself, so
@@ -98,13 +98,13 @@ export default function AdminIntegrations() {
       )}
 
       {!mayTest && !meQ.isLoading ? (
-        <p className="text-[11px] text-muted">
+        <p className="text-xs text-muted">
           Your role may read this list but not fire a self-check; a test call is an outbound
           request, so it is not a read.
         </p>
       ) : null}
 
-      <p className="text-[11px] text-muted">
+      <p className="text-xs text-muted">
         Mock connectors behind real interfaces (Docs/APIs.md §4) — said honestly on stage. Each
         mock answers from something real in this system (the parcels table, the event ledger, the
         seeded gazette PDFs, object storage), so the shape of every reply is the shape the live
@@ -137,8 +137,8 @@ function AdapterCard({ adapter, mayTest }: { adapter: Adapter; mayTest: boolean 
     <section className="card flex flex-col">
       <div className="flex items-start justify-between gap-2">
         <div>
-          <h2 className="font-bold text-ink">{adapter.title || titleize(name)}</h2>
-          <p className="font-mono text-[11px] text-muted">{name}</p>
+          <h2 className="font-semibold text-ink">{adapter.title || titleize(name)}</h2>
+          <p className="font-mono text-xs text-muted">{name}</p>
         </div>
         {live ? (
           <span className="badge shrink-0 border border-accent bg-accent/10 text-accent">Live</span>
@@ -156,7 +156,7 @@ function AdapterCard({ adapter, mayTest }: { adapter: Adapter; mayTest: boolean 
         {adapter.interface ? (
           <div>
             <dt className="text-muted">Interface</dt>
-            <dd className="break-words font-mono text-[11px] text-ink">{adapter.interface}</dd>
+            <dd className="break-words font-mono text-xs text-ink">{adapter.interface}</dd>
           </div>
         ) : null}
         {adapter.real_target ? (
@@ -174,7 +174,7 @@ function AdapterCard({ adapter, mayTest }: { adapter: Adapter; mayTest: boolean 
         {deferred.length ? (
           <div>
             <dt className="text-muted">Not implemented in this build</dt>
-            <dd className="font-mono text-[11px] text-[#8A5300]">{deferred.join(', ')}</dd>
+            <dd className="font-mono text-xs text-[#8A5300]">{deferred.join(', ')}</dd>
           </div>
         ) : null}
       </dl>
@@ -204,7 +204,7 @@ function AdapterCard({ adapter, mayTest }: { adapter: Adapter; mayTest: boolean 
             {extras.map(([k, v]) => (
               <li key={k} className="break-words">
                 <span className="text-muted">{titleize(k)}: </span>
-                <span className="font-mono text-[11px] text-ink">
+                <span className="font-mono text-xs text-ink">
                   {typeof v === 'object' ? JSON.stringify(v) : String(v)}
                 </span>
               </li>

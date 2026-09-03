@@ -55,11 +55,11 @@ export function Panel({
 }) {
   return (
     <section className={`card p-0 ${className}`}>
-      <div className="flex items-center justify-between gap-3 border-b border-border bg-surface px-3 py-2">
-        <h2 className="text-sm font-bold text-ink">{title}</h2>
+      <div className="card-head">
+        <h2 className="text-base font-semibold text-ink">{title}</h2>
         {right ? <div className="text-xs text-muted">{right}</div> : null}
       </div>
-      <div className="p-3">{children}</div>
+      <div className="card-body">{children}</div>
     </section>
   )
 }

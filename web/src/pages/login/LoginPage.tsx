@@ -14,6 +14,9 @@ import { useNavigate } from 'react-router-dom'
 import { getDemoDate, setDemoDate } from '../../lib/api'
 import { landingFor, login } from '../../lib/auth'
 import { errorText } from '../../components/ui/format'
+import Logo from '../../components/gov/Logo'
+import TricolourRule from '../../components/gov/TricolourRule'
+import UtilityStrip from '../../components/gov/UtilityStrip'
 
 const DEMO_PASSWORD = 'demo123'
 
@@ -98,32 +101,37 @@ export default function LoginPage() {
     }
   }
 
-  const inputCls =
-    'w-full rounded border border-border bg-bg px-2 py-1.5 text-sm text-ink ' +
-    'focus:outline-none focus:ring-2 focus:ring-accent focus:border-accent'
-
   return (
-    <div className="min-h-screen bg-surface">
+    <div className="flex min-h-screen flex-col bg-surface">
+      <TricolourRule />
+      <UtilityStrip />
+
       {/* Masthead — bilingual from the first screen (Docs/Frontend.md §9). */}
-      <header className="border-b-4 border-accent2 bg-ink text-white">
-        <div className="mx-auto flex max-w-screen-xl flex-wrap items-baseline gap-x-3 gap-y-1 px-4 py-3">
-          <span className="text-2xl font-bold tracking-tight">BhuArjan</span>
-          <span className="text-xl font-semibold opacity-90">भू-अर्जन</span>
-          <span className="ml-auto text-xs opacity-80">
-            Department of Land Resources · Ministry of Rural Development
-          </span>
-        </div>
-        <div className="mx-auto max-w-screen-xl px-4 pb-3 text-sm opacity-90">
-          National Land Acquisition &amp; Management System
-          <span className="mx-2 opacity-50">|</span>
-          <span>राष्ट्रीय भूमि अर्जन एवं प्रबंधन प्रणाली</span>
+      <header className="border-b border-border bg-bg">
+        <div className="mx-auto flex max-w-screen-xl flex-wrap items-center gap-4 px-4 py-4">
+          <Logo size={48} className="shrink-0" />
+          <div className="leading-tight">
+            <div className="text-2xl font-semibold tracking-tight text-ink">
+              BhuArjan <span className="font-semibold text-accent">भू-अर्जन</span>
+            </div>
+            <div className="text-xs text-muted">
+              National Land Acquisition &amp; Management System
+              <span className="mx-1.5 text-border">|</span>
+              राष्ट्रीय भूमि अर्जन एवं प्रबंधन प्रणाली
+            </div>
+          </div>
+          <div className="ml-auto hidden text-right text-xs uppercase tracking-[0.12em] text-muted sm:block">
+            Department of Land Resources
+            <br />
+            Ministry of Rural Development
+          </div>
         </div>
       </header>
 
-      <main className="mx-auto grid max-w-screen-xl gap-4 px-4 py-6 lg:grid-cols-[22rem_1fr]">
+      <main id="main" className="mx-auto grid w-full max-w-screen-xl flex-1 gap-4 px-4 py-6 lg:grid-cols-[22rem_1fr]">
         {/* --- credential form --- */}
         <section className="card h-fit">
-          <h1 className="text-base font-bold text-ink">
+          <h1 className="text-base font-semibold text-ink">
             Sign in <span className="font-normal text-muted">/ साइन इन</span>
           </h1>
           <p className="mt-1 text-xs text-muted">
@@ -143,7 +151,7 @@ export default function LoginPage() {
                 Username / उपयोगकर्ता नाम
               </span>
               <input
-                className={inputCls}
+                className="field"
                 value={username}
                 autoComplete="username"
                 autoFocus
@@ -157,7 +165,7 @@ export default function LoginPage() {
                 Password / पासवर्ड
               </span>
               <input
-                className={inputCls}
+                className="field"
                 type="password"
                 value={password}
                 autoComplete="current-password"
@@ -170,7 +178,7 @@ export default function LoginPage() {
                 Demo date / प्रदर्शन तिथि
               </span>
               <input
-                className={inputCls}
+                className="field"
                 type="date"
                 value={demoDate}
                 onChange={(e) => {
@@ -178,7 +186,7 @@ export default function LoginPage() {
                   setDemoDate(e.target.value || null)
                 }}
               />
-              <span className="text-[11px] text-muted">
+              <span className="text-xs text-muted">
                 Sent as <code>X-Demo-Date</code>; honoured only when the server runs
                 with <code>DEMO_MODE=true</code>.
               </span>
@@ -215,7 +223,7 @@ export default function LoginPage() {
         {/* --- demo bench --- */}
         <section className="card">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h2 className="text-base font-bold text-ink">
+            <h2 className="text-base font-semibold text-ink">
               Demo quick sign-in <span className="font-normal text-muted">/ त्वरित प्रवेश</span>
             </h2>
             <span className="text-xs text-muted">
@@ -237,16 +245,16 @@ export default function LoginPage() {
                 className="flex flex-col items-start gap-1 rounded border border-border bg-bg p-3 text-left hover:border-accent hover:bg-surface focus:outline-none focus:ring-2 focus:ring-accent disabled:opacity-50"
               >
                 <div className="flex w-full items-baseline justify-between gap-2">
-                  <span className="text-sm font-bold text-ink">{a.role}</span>
-                  <span className="text-[11px] text-muted">{a.roleHi}</span>
+                  <span className="text-sm font-semibold text-ink">{a.role}</span>
+                  <span className="text-xs text-muted">{a.roleHi}</span>
                 </div>
                 <span className="text-xs text-muted">{a.who}</span>
                 <span className="text-xs">
                   <span className="font-semibold text-ink">Scope:</span>{' '}
                   <span className="text-muted">{a.scope}</span>
                 </span>
-                <span className="text-[11px] leading-snug text-muted">{a.can}</span>
-                <span className="mt-1 w-full border-t border-border pt-1 font-mono text-[11px] text-accent">
+                <span className="text-xs leading-snug text-muted">{a.can}</span>
+                <span className="mt-1 w-full border-t border-border pt-1 font-mono text-xs text-accent">
                   {busy === a.username ? 'Signing in…' : a.username}
                 </span>
               </button>
@@ -255,9 +263,11 @@ export default function LoginPage() {
         </section>
       </main>
 
-      <footer className="mx-auto max-w-screen-xl px-4 pb-8 text-xs text-muted">
+      <footer className="mt-4 border-t border-border bg-bg">
+        <div className="mx-auto max-w-screen-xl px-4 py-4 text-xs text-muted">
         Prototype for SIH 2026 (PS 26016). Demonstration data is synthetic; no real
-        landowner information is present (Docs/rules.md A5, C5).
+          landowner information is present (Docs/rules.md A5, C5).
+        </div>
       </footer>
     </div>
   )

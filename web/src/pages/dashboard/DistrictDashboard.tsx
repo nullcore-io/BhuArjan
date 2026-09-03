@@ -22,19 +22,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  Legend,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts'
 import Drawer from '../../components/ui/Drawer'
 import { Empty, ErrorNote, Loading, Panel } from '../../components/ui/Feedback'
 import KpiTile from '../../components/ui/KpiTile'
@@ -51,6 +38,10 @@ import {
   titleize,
 } from '../../components/ui/format'
 import { api, formatINR } from '../../lib/api'
+import ClockHealthChart from '../../components/charts/ClockHealthChart'
+import CompensationChart from '../../components/charts/CompensationChart'
+import StageFunnelChart from '../../components/charts/StageFunnelChart'
+import { CLOCK_STATUS_ORDER } from '../../theme/charts'
 
 /* --------------------------------------------------------------- API shapes */
 
@@ -127,37 +118,6 @@ interface ExplainResponse {
   event_types?: string[] | null
   event_ids?: string[] | null
   cases?: ExplainCase[] | null
-}
-
-/* ------------------------------------------------------------------ colours */
-
-const C = {
-  accent: '#1F4E9C',
-  accent2: '#B9770E',
-  ok: '#2E7D32',
-  amber: '#C77700',
-  red: '#B3261E',
-  black: '#1B1B1B',
-  muted: '#5B6675',
-  border: '#D9DEE5',
-}
-
-const CLOCK_STATUS_ORDER = [
-  'running',
-  'extended',
-  'suspended',
-  'closed',
-  'breached',
-  'lapsed',
-]
-
-const CLOCK_STATUS_COLOUR: Record<string, string> = {
-  running: C.ok,
-  extended: C.accent,
-  suspended: C.accent2,
-  closed: C.muted,
-  breached: C.black,
-  lapsed: C.red,
 }
 
 /* -------------------------------------------------------------- tile config */
@@ -403,7 +363,7 @@ export default function DistrictDashboard() {
   /* --- render ----------------------------------------------------------- */
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-6">
       <nav className="text-xs text-muted">
         <Link to="/national" className="text-accent underline decoration-dotted underline-offset-2">
           National dashboard
@@ -416,7 +376,7 @@ export default function DistrictDashboard() {
 
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-lg font-bold text-ink">
+          <h1 className="text-lg font-semibold text-ink">
             {scope || 'District'} district{' '}
             <span className="font-normal text-muted">/ ज़िला डैशबोर्ड</span>
           </h1>
@@ -431,7 +391,7 @@ export default function DistrictDashboard() {
 
         <form className="flex flex-wrap items-end gap-2" onSubmit={(e) => e.preventDefault()}>
           <label className="flex flex-col gap-0.5">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted">
+            <span className="text-xs font-semibold uppercase tracking-wide text-muted">
               Statute
             </span>
             <select
@@ -447,7 +407,7 @@ export default function DistrictDashboard() {
             </select>
           </label>
           <label className="flex flex-col gap-0.5">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted">
+            <span className="text-xs font-semibold uppercase tracking-wide text-muted">
               Sector
             </span>
             <input
@@ -458,7 +418,7 @@ export default function DistrictDashboard() {
             />
           </label>
           <label className="flex flex-col gap-0.5">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted">
+            <span className="text-xs font-semibold uppercase tracking-wide text-muted">
               From
             </span>
             <input
@@ -469,7 +429,7 @@ export default function DistrictDashboard() {
             />
           </label>
           <label className="flex flex-col gap-0.5">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted">To</span>
+            <span className="text-xs font-semibold uppercase tracking-wide text-muted">To</span>
             <input
               type="date"
               className="rounded border border-border bg-bg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
@@ -525,7 +485,7 @@ export default function DistrictDashboard() {
       {dash.isSuccess ? (
         <>
           {/* --- KPI tiles --- */}
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {TILES.map((t) => {
               const canExplain = Boolean(t.explain && explainableSet.has(t.explain))
               return (
@@ -545,10 +505,76 @@ export default function DistrictDashboard() {
             })}
           </div>
 
+          <Panel
+            title="Top-risk cases"
+            right={risk.length ? 'nearest statutory deadline first' : 'from the alert queue'}
+          >
+            {alertsFallback.isError && risk.length === 0 ? (
+              <ErrorNote error={alertsFallback.error} what="Risk queue" />
+            ) : riskRows.length === 0 ? (
+              <Empty>No open clocks approaching their statutory due date in this district.</Empty>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="gov dense">
+                  <thead>
+                    <tr>
+                      <th>Case</th>
+                      <th>Project</th>
+                      <th>Clock</th>
+                      <th>Status</th>
+                      <th>Due</th>
+                      <th>Days</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {riskRows.map((r, i) => (
+                      <tr key={`${r.case_id ?? 'row'}-${r.clock_id ?? i}`}>
+                        <td className="whitespace-nowrap">
+                          {r.case_id ? (
+                            <Link
+                              className="text-accent underline decoration-dotted underline-offset-2"
+                              to={`/cases/${r.case_id}`}
+                            >
+                              {r.case_no || 'Open case'}
+                            </Link>
+                          ) : (
+                            r.case_no || '—'
+                          )}
+                        </td>
+                        <td className="max-w-[16rem] truncate" title={r.project ?? undefined}>
+                          {r.project || '—'}
+                        </td>
+                        <td title={r.consequence ?? undefined}>
+                          {titleize(r.clock_id)}
+                          {r.basis ? (
+                            <span className="ml-1 text-xs text-muted">({r.basis})</span>
+                          ) : null}
+                        </td>
+                        <td>
+                          <LevelChip
+                            level={r.level ?? r.status}
+                            title={r.consequence ?? undefined}
+                          />
+                        </td>
+                        <td className="whitespace-nowrap">{formatDay(r.due_date)}</td>
+                        <td className="whitespace-nowrap">
+                          <DaysLeft days={r.days_left} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Panel>
+
           {/* --- charts --- */}
-          <div className="grid gap-4 xl:grid-cols-2">
-            <Panel
-              title="Compensation assessed vs paid"
+          {/* Each chart ships its own text-equivalent table and keyboard
+              legend (Docs/design.md §4); see components/charts/. */}
+          <div className="grid gap-5 xl:grid-cols-2">
+            <CompensationChart
+              series={series}
+              scale={scale}
               right={
                 <label className="flex items-center gap-1">
                   <input
@@ -559,191 +585,17 @@ export default function DistrictDashboard() {
                   Cumulative
                 </label>
               }
-            >
-              {series.length === 0 ? (
-                <Empty>
-                  No COMPENSATION_ASSESSED or PAYMENT_MADE events in this district yet.
-                </Empty>
-              ) : (
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={series} margin={{ top: 8, right: 12, left: 4, bottom: 4 }}>
-                      <CartesianGrid stroke={C.border} strokeDasharray="2 2" vertical={false} />
-                      <XAxis dataKey="month" tick={{ fontSize: 11, fill: C.muted }} />
-                      <YAxis
-                        tick={{ fontSize: 11, fill: C.muted }}
-                        width={62}
-                        label={{
-                          value: scale.unit,
-                          angle: -90,
-                          position: 'insideLeft',
-                          style: { fontSize: 11, fill: C.muted },
-                        }}
-                      />
-                      <Tooltip
-                        formatter={(v: number | string, name: string) => [
-                          formatINR(num(v) * scale.divisor),
-                          name,
-                        ]}
-                        contentStyle={{
-                          fontSize: 12,
-                          borderRadius: 4,
-                          border: `1px solid ${C.border}`,
-                        }}
-                      />
-                      <Legend wrapperStyle={{ fontSize: 12 }} />
-                      <Line
-                        type="monotone"
-                        dataKey="Assessed"
-                        stroke={C.accent}
-                        strokeWidth={2}
-                        dot={{ r: 3 }}
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="Paid"
-                        stroke={C.ok}
-                        strokeWidth={2}
-                        dot={{ r: 3 }}
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
-              <p className="mt-1 text-[11px] text-muted">
-                Gap between the lines is money owed to landowners under s.30 — interest at
-                12% p.a. accrues on it (s.30(3)).
-              </p>
-            </Panel>
+              caption="Gap between the lines is money owed to landowners under s.30 — interest at 12% p.a. accrues on it (s.30(3))."
+            />
 
-            <Panel title="Stage funnel" right="cases by current stage">
-              {funnel.length === 0 ? (
-                <Empty>No cases in this district.</Empty>
-              ) : (
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={funnel} margin={{ top: 8, right: 12, left: 4, bottom: 4 }}>
-                      <CartesianGrid stroke={C.border} strokeDasharray="2 2" vertical={false} />
-                      <XAxis
-                        dataKey="stage"
-                        tick={{ fontSize: 10, fill: C.muted }}
-                        interval={0}
-                        angle={-20}
-                        textAnchor="end"
-                        height={54}
-                      />
-                      <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: C.muted }} width={36} />
-                      <Tooltip
-                        contentStyle={{
-                          fontSize: 12,
-                          borderRadius: 4,
-                          border: `1px solid ${C.border}`,
-                        }}
-                      />
-                      <Bar dataKey="count" name="Cases" fill={C.accent} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
-            </Panel>
+            <StageFunnelChart funnel={funnel} />
 
-            <Panel
-              title="Clock health"
+            <ClockHealthChart
+              data={clockData}
               right={clockTotal ? `${formatCount(clockTotal)} clocks` : undefined}
-            >
-              {clockData.length === 0 ? (
-                <Empty>No statutory clocks have been evaluated in this district.</Empty>
-              ) : (
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={clockData} margin={{ top: 8, right: 12, left: 4, bottom: 4 }}>
-                      <CartesianGrid stroke={C.border} strokeDasharray="2 2" vertical={false} />
-                      <XAxis dataKey="status" tick={{ fontSize: 11, fill: C.muted }} />
-                      <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: C.muted }} width={36} />
-                      <Tooltip
-                        contentStyle={{
-                          fontSize: 12,
-                          borderRadius: 4,
-                          border: `1px solid ${C.border}`,
-                        }}
-                      />
-                      <Bar dataKey="count" name="Clocks">
-                        {clockData.map((row) => (
-                          <Cell key={row.key} fill={CLOCK_STATUS_COLOUR[row.key] ?? C.muted} />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
-              <p className="mt-1 text-[11px] text-muted">
-                Breached and lapsed are distinct: a breach is a missed deadline, a lapse is
-                the statutory consequence of one (s.25 / s.19(7)).
-              </p>
-            </Panel>
+              caption="Breached and lapsed are distinct: a breach is a missed deadline, a lapse is the statutory consequence of one (s.25 / s.19(7))."
+            />
 
-            <Panel
-              title="Top-risk cases"
-              right={risk.length ? 'nearest statutory deadline first' : 'from the alert queue'}
-            >
-              {alertsFallback.isError && risk.length === 0 ? (
-                <ErrorNote error={alertsFallback.error} what="Risk queue" />
-              ) : riskRows.length === 0 ? (
-                <Empty>No open clocks approaching their statutory due date in this district.</Empty>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="gov">
-                    <thead>
-                      <tr>
-                        <th>Case</th>
-                        <th>Project</th>
-                        <th>Clock</th>
-                        <th>Status</th>
-                        <th>Due</th>
-                        <th>Days</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {riskRows.map((r, i) => (
-                        <tr key={`${r.case_id ?? 'row'}-${r.clock_id ?? i}`}>
-                          <td className="whitespace-nowrap">
-                            {r.case_id ? (
-                              <Link
-                                className="text-accent underline decoration-dotted underline-offset-2"
-                                to={`/cases/${r.case_id}`}
-                              >
-                                {r.case_no || 'Open case'}
-                              </Link>
-                            ) : (
-                              r.case_no || '—'
-                            )}
-                          </td>
-                          <td className="max-w-[16rem] truncate" title={r.project ?? undefined}>
-                            {r.project || '—'}
-                          </td>
-                          <td title={r.consequence ?? undefined}>
-                            {titleize(r.clock_id)}
-                            {r.basis ? (
-                              <span className="ml-1 text-xs text-muted">({r.basis})</span>
-                            ) : null}
-                          </td>
-                          <td>
-                            <LevelChip
-                              level={r.level ?? r.status}
-                              title={r.consequence ?? undefined}
-                            />
-                          </td>
-                          <td className="whitespace-nowrap">{formatDay(r.due_date)}</td>
-                          <td className="whitespace-nowrap">
-                            <DaysLeft days={r.days_left} />
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </Panel>
           </div>
         </>
       ) : null}
@@ -818,7 +670,7 @@ function ExplainDrawer({
       {q.isError ? <ErrorNote error={q.error} what="Explain" /> : null}
 
       {q.isSuccess ? (
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-6">
           <div className="flex flex-wrap gap-1">
             {listOf<string>(q.data?.event_types, 'event_types').map((t) => (
               <span key={t} className="badge bg-surface text-muted border border-border">
@@ -831,7 +683,7 @@ function ExplainDrawer({
             <Empty>No events contribute to this figure in this district.</Empty>
           ) : (
             <div className="overflow-x-auto">
-              <table className="gov">
+              <table className="gov dense">
                 <thead>
                   <tr>
                     <th>Case</th>
@@ -879,14 +731,14 @@ function ExplainDrawer({
             <summary className="cursor-pointer font-semibold text-ink">
               Contributing event ids ({eventIds.length})
             </summary>
-            <ul className="mt-2 max-h-64 overflow-auto font-mono text-[11px] leading-relaxed text-muted">
+            <ul className="mt-2 max-h-64 overflow-auto font-mono text-xs leading-relaxed text-muted">
               {eventIds.map((id) => (
                 <li key={id}>{id}</li>
               ))}
             </ul>
           </details>
 
-          <p className="text-[11px] text-muted">
+          <p className="text-xs text-muted">
             Docs/rules.md C7 — every dashboard figure carries an &ldquo;as of&rdquo; sequence
             number and can be exploded to the events that produced it.
           </p>

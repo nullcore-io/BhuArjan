@@ -191,7 +191,7 @@ export default function ProjectPage() {
           {/* --- header --- */}
           <header className="card flex flex-col gap-2">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-              <h1 className="text-lg font-bold text-ink">{p.name || 'Untitled project'}</h1>
+              <h1 className="text-lg font-semibold text-ink">{p.name || 'Untitled project'}</h1>
               <StatuteBadge track={p.statute_track} />
               {p.ruleset_version ? (
                 <span className="badge border border-border bg-surface text-muted">

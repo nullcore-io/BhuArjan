@@ -40,7 +40,7 @@ export default function Ledger({
   return (
     <section className="card" aria-labelledby="ledger-h">
       <div className="flex items-baseline justify-between gap-2">
-        <h2 id="ledger-h" className="text-sm font-bold uppercase tracking-wide text-muted">
+        <h2 id="ledger-h" className="text-sm font-semibold uppercase tracking-wide text-muted">
           Ledger
         </h2>
         <span className="text-xs text-muted">
@@ -64,7 +64,7 @@ export default function Ledger({
         <p className="mt-3 text-xs text-muted">No events recorded on this case yet.</p>
       ) : (
         <div className="mt-2 max-h-[28rem] overflow-y-auto">
-          <table className="gov">
+          <table className="gov dense">
             <caption className="sr-only">
               Case ledger, newest first. Each row expands to its payload.
             </caption>
@@ -124,7 +124,7 @@ export default function Ledger({
                           <span className="text-muted">—</span>
                         )}
                       </td>
-                      <td className="font-mono text-[11px] text-muted" title={e.hash ?? ''}>
+                      <td className="font-mono text-xs text-muted" title={e.hash ?? ''}>
                         {hashPrefix(e.hash, 10)}
                       </td>
                     </tr>
@@ -132,13 +132,13 @@ export default function Ledger({
                       <tr>
                         <td colSpan={6} className="bg-surface align-top">
                           <div id={`payload-${key}`} className="py-2">
-                            <dl className="mb-2 grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] sm:grid-cols-4">
+                            <dl className="mb-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs sm:grid-cols-4">
                               <Meta label="Recorded at" value={formatTs(e.recorded_at)} />
                               <Meta label="Event id" value={e.id ?? '—'} mono />
                               <Meta label="prev_hash" value={hashPrefix(e.prev_hash, 16)} mono />
                               <Meta label="hash" value={hashPrefix(e.hash, 16)} mono />
                             </dl>
-                            <pre className="max-h-64 overflow-auto rounded border border-border bg-bg p-2 font-mono text-[11px] leading-snug text-ink">
+                            <pre className="max-h-64 overflow-auto rounded border border-border bg-bg p-2 font-mono text-xs leading-snug text-ink">
                               {JSON.stringify(e.payload ?? {}, null, 2)}
                             </pre>
                           </div>

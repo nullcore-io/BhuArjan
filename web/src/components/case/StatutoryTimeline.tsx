@@ -89,7 +89,7 @@ export default function StatutoryTimeline({
   return (
     <section className="card" aria-labelledby="timeline-h">
       <div className="flex items-baseline justify-between gap-2">
-        <h2 id="timeline-h" className="text-sm font-bold uppercase tracking-wide text-muted">
+        <h2 id="timeline-h" className="text-sm font-semibold uppercase tracking-wide text-muted">
           Statutory timeline
         </h2>
         <span className="text-xs text-muted">{titleize(track) || 'Track'}</span>
@@ -105,7 +105,7 @@ export default function StatutoryTimeline({
             <div className="flex items-center">
               <span
                 className={[
-                  'grid h-6 w-6 shrink-0 place-items-center rounded-full border text-[11px] font-bold',
+                  'grid h-6 w-6 shrink-0 place-items-center rounded-full border text-xs font-semibold',
                   r.position === 'done'
                     ? 'border-ok bg-ok text-white'
                     : r.position === 'current'
@@ -145,7 +145,7 @@ export default function StatutoryTimeline({
                 {r.step.label}
               </p>
               {r.step.section ? (
-                <p className="mt-0.5 font-mono text-[11px] text-muted">{r.step.section}</p>
+                <p className="mt-0.5 font-mono text-xs text-muted">{r.step.section}</p>
               ) : null}
               <StageDate row={r} />
             </div>
@@ -159,7 +159,7 @@ export default function StatutoryTimeline({
 function StageDate({ row }: { row: Row }) {
   if (row.actual) {
     return (
-      <p className="mt-1 text-[11px] text-ink">
+      <p className="mt-1 text-xs text-ink">
         <span className="text-muted">on </span>
         <span className="font-semibold">{formatDate(row.actual)}</span>
       </p>
@@ -170,7 +170,7 @@ function StageDate({ row }: { row: Row }) {
     const left = daysBetween(today(), row.due)
     const overdue = left != null && left < 0
     return (
-      <p className="mt-1 text-[11px]">
+      <p className="mt-1 text-xs">
         <span className="text-muted">due </span>
         <span
           className={`font-semibold ${
@@ -191,5 +191,5 @@ function StageDate({ row }: { row: Row }) {
       </p>
     )
   }
-  return <p className="mt-1 text-[11px] text-muted">not reached</p>
+  return <p className="mt-1 text-xs text-muted">not reached</p>
 }

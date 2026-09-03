@@ -36,19 +36,19 @@ export default function KpiTile({
 }: KpiTileProps) {
   const missing = value === null || value === undefined || value === '—'
   return (
-    <div className="card flex flex-col gap-1 p-3">
+    <div className="card flex flex-col gap-1.5 p-5">
       <div className="leading-tight">
         <div className="text-xs font-semibold uppercase tracking-wide text-muted">{label}</div>
         {labelHi ? <div className="text-xs text-muted">{labelHi}</div> : null}
       </div>
       <div
-        className={`text-2xl font-bold tabular-nums ${missing ? 'text-muted' : 'text-ink'}`}
+        className={`text-hero font-semibold leading-none tabular-nums ${missing ? 'text-muted' : 'text-ink'}`}
         title={source ? `Source: ${source}` : undefined}
       >
         {missing ? '—' : value}
       </div>
       {sub ? <div className="text-xs text-muted">{sub}</div> : null}
-      <div className="mt-auto flex items-center justify-between gap-2 pt-1 text-[11px] text-muted">
+      <div className="mt-auto flex items-center justify-between gap-2 pt-2 text-xs text-muted">
         <span title="Event sequence number this figure was computed at (Docs/rules.md C7)">
           {asOfSeq === null || asOfSeq === undefined ? 'as of —' : `as of seq ${asOfSeq}`}
         </span>

@@ -109,7 +109,7 @@ export default function PublicStatus() {
     <div className="min-h-screen bg-surface">
       <header className="border-b-4 border-accent2 bg-ink text-white">
         <div className="mx-auto flex max-w-md flex-wrap items-baseline gap-x-2 px-4 py-3">
-          <span className="text-xl font-bold">BhuArjan</span>
+          <span className="text-2xl font-semibold">BhuArjan</span>
           <span className="text-lg font-semibold opacity-90">भू-अर्जन</span>
         </div>
         <div className="mx-auto max-w-md px-4 pb-3 text-sm leading-snug opacity-90">
@@ -122,7 +122,7 @@ export default function PublicStatus() {
       <main className="mx-auto flex max-w-md flex-col gap-4 px-4 py-5">
         {/* --- lookup --- */}
         <section className="card">
-          <h1 className="text-lg font-bold leading-snug text-ink">
+          <h1 className="text-lg font-semibold leading-snug text-ink">
             Check a plot
             <span className="block text-base font-normal text-muted">अपनी भूमि की स्थिति देखें</span>
           </h1>
@@ -260,7 +260,7 @@ export default function PublicStatus() {
                 <div className="text-sm font-semibold uppercase tracking-wide text-muted">
                   Project / परियोजना
                 </div>
-                <div className="text-lg font-bold leading-snug text-ink">{d.project || '—'}</div>
+                <div className="text-lg font-semibold leading-snug text-ink">{d.project || '—'}</div>
                 <div className="text-sm text-muted">
                   {statuteLabel(d.statute)}
                   {d.sector ? ` · ${d.sector}` : ''}
@@ -315,7 +315,7 @@ export default function PublicStatus() {
             </section>
 
             <section className="card flex flex-col gap-3">
-              <h2 className="text-base font-bold text-ink">
+              <h2 className="text-base font-semibold text-ink">
                 Compensation <span className="font-normal text-muted">/ मुआवजा</span>
               </h2>
               <p className="text-xs text-muted">
@@ -422,7 +422,7 @@ function Row({
       <div className="text-sm font-semibold uppercase tracking-wide text-muted">
         {label} <span className="normal-case">/ {labelHi}</span>
       </div>
-      <div className="text-lg font-bold leading-snug text-ink">{value}</div>
+      <div className="text-lg font-semibold leading-snug text-ink">{value}</div>
       {note ? <div className="text-sm text-muted">{note}</div> : null}
     </div>
   )
@@ -442,7 +442,7 @@ function Figure({
       <div className="text-xs font-semibold uppercase tracking-wide text-muted">
         {label} / {labelHi}
       </div>
-      <div className="text-xl font-bold tabular-nums text-ink">{value}</div>
+      <div className="text-2xl font-semibold tabular-nums text-ink">{value}</div>
     </div>
   )
 }

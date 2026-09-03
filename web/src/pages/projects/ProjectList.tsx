@@ -69,7 +69,7 @@ export default function ProjectList() {
     <div className="flex flex-col gap-4">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-lg font-bold text-ink">
+          <h1 className="text-lg font-semibold text-ink">
             Projects <span className="font-normal text-muted">/ परियोजनाएँ</span>
           </h1>
           <p className="text-xs text-muted">
@@ -126,7 +126,7 @@ export default function ProjectList() {
                         {p.name || 'Untitled project'}
                       </Link>
                       {p.ruleset_version ? (
-                        <span className="ml-2 text-[11px] text-muted">
+                        <span className="ml-2 text-xs text-muted">
                           rule-set {p.ruleset_version}
                         </span>
                       ) : null}
@@ -183,7 +183,7 @@ function NewProjectForm({ onDone }: { onDone: () => void }) {
         if (name.trim()) create.mutate()
       }}
     >
-      <h2 className="text-sm font-bold text-ink">Register a project</h2>
+      <h2 className="text-sm font-semibold text-ink">Register a project</h2>
       <p className="text-xs text-muted">
         The statute track is pinned to the project and inherited by every case under it;
         the rule-set version is pinned at creation so a later overlay never rewrites

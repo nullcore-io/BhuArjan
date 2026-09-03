@@ -4,8 +4,12 @@ import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import App from './App'
 import './i18n'
+import { applyStoredPrefs } from './lib/prefs'
 import 'leaflet/dist/leaflet.css'
 import './styles/index.css'
+
+// Text size / contrast are attributes on <html>; set them before first paint.
+applyStoredPrefs()
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 15_000 } },

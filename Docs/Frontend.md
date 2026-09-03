@@ -104,13 +104,14 @@ Single input: ULPIN or state/district/village/survey no. Output: project name, s
 
 ## 10. Design tokens
 
-```
---bg: #FFFFFF  --surface: #F6F7F9  --border: #D9DEE5
---ink: #14213D  --muted: #5B6675
---accent: #1F4E9C (actions)  --accent-2: #B9770E (saffron-adjacent, sparing)
---ok: #2E7D32  --amber: #C77700  --red: #B3261E  --black: #1B1B1B (breached)
-radius 4px · shadows none · borders 1px · table row height 36px
-```
+**Superseded by [`design.md`](design.md).** The palette, type scale, weight system and
+component visual treatment now live there as the single source of truth; it is implemented in
+`web/tailwind.config.js` and `web/src/styles/index.css`. Structure is unchanged and still
+governed by this file: radius 4px, shadows none, borders 1px, table row height 36px.
+
+Three values in `design.md` are deliberately deviated from in the implementation — the amber
+token, the focus-ring opacity, and `--ink-muted` — each marked `DEVIATION` in
+`web/tailwind.config.js` with the contrast measurement that justifies it.
 
 ## 11. Field mode (PWA)
 

@@ -68,7 +68,7 @@ export default function IntegrityBadge({
             verified ? 'border-ok bg-ok/5' : 'border-red bg-red/5'
           }`}
         >
-          <p className={`text-base font-bold ${verified ? 'text-[#1B5E20]' : 'text-[#8C1D18]'}`}>
+          <p className={`text-base font-semibold ${verified ? 'text-[#1B5E20]' : 'text-[#8C1D18]'}`}>
             {verified ? 'Verified — no tampering detected' : 'Mismatch — chain does not verify'}
           </p>
           <dl className="mt-2 grid grid-cols-1 gap-1 text-xs sm:grid-cols-2">

@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b --noCheck && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "e2e": "playwright test",
+    "shots": "playwright test screenshots --reporter=list"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.62.11",
@@ -21,6 +23,7 @@
     "zustand": "^5.0.2"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@types/leaflet": "^1.9.15",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",

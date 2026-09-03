@@ -23,6 +23,7 @@ import Ledger from '../../components/case/Ledger'
 import ParcelMap from '../../components/case/ParcelMap'
 import RRTab from '../../components/case/RRTab'
 import StatutoryTimeline from '../../components/case/StatutoryTimeline'
+import { Loading } from '../../components/ui/Feedback'
 import {
   CaseAlert,
   Clock,
@@ -143,12 +144,18 @@ export default function CasePage() {
   if (!id) return <p className="card">No case id in the URL.</p>
 
   if (caseQ.isLoading) {
-    return <p className="card text-sm text-muted">Loading case…</p>
+    // Shared <Loading> carries role="status", so the wait is announced to a
+    // screen reader instead of being a silent paragraph.
+    return (
+      <div className="card">
+        <Loading label="Loading case…" />
+      </div>
+    )
   }
   if (caseQ.isError) {
     return (
       <div className="card border-red" role="alert">
-        <h1 className="text-base font-bold text-[#8C1D18]">Case not available</h1>
+        <h1 className="text-base font-semibold text-[#8C1D18]">Case not available</h1>
         <p className="mt-1 text-sm">{errorText(caseQ.error)}</p>
         <p className="mt-1 text-xs text-muted">
           A case outside your jurisdiction returns 404 by design (Docs/APIs.md §1).
@@ -167,7 +174,7 @@ export default function CasePage() {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-lg font-bold text-ink">{kase?.case_no || 'Case'}</h1>
+              <h1 className="text-lg font-semibold text-ink">{kase?.case_no || 'Case'}</h1>
               <span className="badge border border-accent bg-accent/10 text-accent">
                 {titleize(kase?.statute_track)}
               </span>
@@ -204,8 +211,8 @@ export default function CasePage() {
 
           <div className="flex items-center gap-3">
             <div className="rounded border border-border bg-surface px-3 py-1.5 text-center">
-              <p className="text-[11px] uppercase tracking-wide text-muted">Risk score</p>
-              <p className="text-lg font-bold tabular-nums text-ink">
+              <p className="text-xs uppercase tracking-wide text-muted">Risk score</p>
+              <p className="text-lg font-semibold tabular-nums text-ink">
                 {risk == null ? '—' : Number(risk).toFixed(0)}
               </p>
             </div>
@@ -233,13 +240,13 @@ export default function CasePage() {
         <div className="lg:col-span-3">
           <section className="card" aria-labelledby="clocks-h">
             <div className="flex items-baseline justify-between gap-2">
-              <h2 id="clocks-h" className="text-sm font-bold uppercase tracking-wide text-muted">
+              <h2 id="clocks-h" className="text-sm font-semibold uppercase tracking-wide text-muted">
                 Statutory clocks
               </h2>
               <span className="text-xs text-muted">{sortedClocks.length}</span>
             </div>
             {clocksQ.isLoading && !clocks.length ? (
-              <p className="mt-3 text-xs text-muted">Loading clocks…</p>
+              <Loading label="Loading clocks…" />
             ) : clocksQ.isError && !clocks.length ? (
               <p
                 role="alert"

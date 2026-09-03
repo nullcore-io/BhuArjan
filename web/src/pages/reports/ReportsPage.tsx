@@ -228,7 +228,7 @@ export default function ReportsPage() {
   return (
     <div className="flex flex-col gap-4">
       <header>
-        <h1 className="text-lg font-bold text-ink">
+        <h1 className="text-lg font-semibold text-ink">
           Reports <span className="font-normal text-muted">/ रिपोर्ट</span>
         </h1>
         <p className="text-xs text-muted">
@@ -259,7 +259,7 @@ export default function ReportsPage() {
             }}
           >
             <label className="flex flex-col gap-1">
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-muted">
+              <span className="text-xs font-semibold uppercase tracking-wide text-muted">
                 Template
               </span>
               <select
@@ -277,7 +277,7 @@ export default function ReportsPage() {
             </label>
 
             <fieldset className="flex flex-col gap-2 rounded border border-border p-2">
-              <legend className="px-1 text-[11px] font-semibold uppercase tracking-wide text-muted">
+              <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-muted">
                 Filters
               </legend>
               <label className="flex flex-col gap-0.5">
@@ -312,14 +312,14 @@ export default function ReportsPage() {
                   ))}
                 </select>
               </label>
-              <p className="text-[11px] text-muted">
+              <p className="text-xs text-muted">
                 Leave a filter blank for everything in your jurisdiction. An unmatched
                 district produces an empty extract, not an error.
               </p>
             </fieldset>
 
             <fieldset className="flex flex-col gap-1">
-              <legend className="text-[11px] font-semibold uppercase tracking-wide text-muted">
+              <legend className="text-xs font-semibold uppercase tracking-wide text-muted">
                 Format
               </legend>
               <div className="flex flex-wrap gap-3">
@@ -351,7 +351,7 @@ export default function ReportsPage() {
                 })}
               </div>
               {!geojsonAllowed ? (
-                <span className="text-[11px] text-muted">
+                <span className="text-xs text-muted">
                   GeoJSON is enabled for the cases register only — it is a parcel map, and
                   the other templates have no geometry to draw.
                 </span>
@@ -439,7 +439,7 @@ export default function ReportsPage() {
                         <td className="text-right tabular-nums">{formatCount(h.row_count)}</td>
                         <td className="text-right tabular-nums">{formatCount(h.as_of_seq)}</td>
                         <td
-                          className="font-mono text-[11px]"
+                          className="font-mono text-xs"
                           title={h.report_hash ?? undefined}
                         >
                           {h.report_hash ? `${h.report_hash.slice(0, 12)}…` : '—'}
@@ -463,7 +463,7 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      <p className="text-[11px] text-muted">
+      <p className="text-xs text-muted">
         Exports embed the ledger sequence and a content hash so any figure can be
         re-verified (Docs/rules.md C7).
       </p>
@@ -528,14 +528,14 @@ function ResultCard({ job }: { job: ReportJob }) {
       </dl>
 
       <div className="rounded border border-border bg-surface p-2">
-        <div className="text-[11px] font-semibold uppercase tracking-wide text-muted">
+        <div className="text-xs font-semibold uppercase tracking-wide text-muted">
           Report hash (SHA-256 of the bytes served)
         </div>
         <div className="mt-1 flex flex-wrap items-center gap-2">
           <code className="break-all font-mono text-xs text-ink">{job.report_hash ?? '—'}</code>
           <CopyButton value={job.report_hash} label="Copy hash" />
         </div>
-        <p className="mt-1 text-[11px] text-muted">
+        <p className="mt-1 text-xs text-muted">
           Re-hash the downloaded file and you get this string back. A CSV also carries{' '}
           <code>#&nbsp;as_of_seq={job.as_of_seq ?? '—'}</code> on its first line; a GeoJSON
           carries it as a top-level member.
@@ -564,7 +564,7 @@ function ResultCard({ job }: { job: ReportJob }) {
         ) : null}
       </div>
 
-      <div className="text-[11px] text-muted">
+      <div className="text-xs text-muted">
         Job <span className="font-mono">{job.job_id}</span>
         {job.detail ? ` · ${job.detail}` : ''}
       </div>

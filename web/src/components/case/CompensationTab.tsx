@@ -63,10 +63,10 @@ export default function CompensationTab({
           <p className="text-xs font-semibold uppercase tracking-wide text-muted">
             Possession gate · s.38
           </p>
-          <p className={`mt-0.5 text-sm font-bold ${gateOpen ? 'text-[#1B5E20]' : 'text-[#8C1D18]'}`}>
+          <p className={`mt-0.5 text-sm font-semibold ${gateOpen ? 'text-[#1B5E20]' : 'text-[#8C1D18]'}`}>
             {gateOpen ? 'Open — compensation paid in full' : 'Blocked — compensation not paid in full'}
           </p>
-          <p className="mt-0.5 text-[11px] text-muted">
+          <p className="mt-0.5 text-xs text-muted">
             Possession may be taken only after compensation is paid or tendered (s.38(1)); under
             urgency (s.40) at least 80% must be paid.
           </p>
@@ -103,7 +103,7 @@ export default function CompensationTab({
                 return (
                   <tr key={l.id ?? `${l.parcel_id}-${i}`}>
                     <td>{parcelLabel(l)}</td>
-                    <td className="font-mono text-[11px]">{l.owner_ref ?? '—'}</td>
+                    <td className="font-mono text-xs">{l.owner_ref ?? '—'}</td>
                     <td className="text-right tabular-nums">{formatINR(l.market_value_paise)}</td>
                     <td className="text-right tabular-nums">
                       {l.factor != null ? num(l.factor).toFixed(2) : '—'}
@@ -138,7 +138,7 @@ export default function CompensationTab({
         </table>
       </div>
 
-      <p className="mt-2 text-[11px] text-muted">
+      <p className="mt-2 text-xs text-muted">
         Market value per s.26(1); First Schedule factor applied to rural land; solatium 100% of
         (MV x factor + assets) per s.30(1); interest 12% p.a. per s.30(3). Owner identities are
         shown as masked references.
@@ -160,7 +160,7 @@ function Tile({
     <div className="min-w-[9rem] flex-1 rounded border border-border bg-surface p-2">
       <p className="text-xs uppercase tracking-wide text-muted">{label}</p>
       <p
-        className={`mt-0.5 text-base font-bold tabular-nums ${
+        className={`mt-0.5 text-base font-semibold tabular-nums ${
           tone === 'amber' ? 'text-[#8A5300]' : tone === 'ok' ? 'text-[#1B5E20]' : 'text-ink'
         }`}
       >

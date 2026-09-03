@@ -116,7 +116,7 @@ function DiffView({ text }: { text: string }) {
         </span>
       </p>
       <div className="max-h-[32rem] overflow-auto rounded border border-border bg-bg">
-        <pre className="min-w-full text-[12px] leading-5">
+        <pre className="min-w-full text-xs leading-5">
           <code>
             {lines.map((line, i) => {
               const kind = classify(line)
@@ -130,7 +130,7 @@ function DiffView({ text }: { text: string }) {
                 <span key={i} className={`flex ${DIFF_CLS[kind]}`}>
                   <span
                     aria-hidden="true"
-                    className="w-5 shrink-0 select-none border-r border-border px-1 text-center font-bold"
+                    className="w-5 shrink-0 select-none border-r border-border px-1 text-center font-semibold"
                   >
                     {marker}
                   </span>
@@ -197,7 +197,7 @@ export default function AdminRulesets() {
   return (
     <div className="space-y-3">
       <header className="card">
-        <h1 className="text-lg font-bold text-ink">Rule-sets</h1>
+        <h1 className="text-lg font-semibold text-ink">Rule-sets</h1>
         <p className="mt-1 text-sm text-muted">
           Every statutory stage, clock and transition this system enforces is loaded from these
           files — not from code (Docs/rules.md C3). A state variation is an overlay on a base
@@ -215,7 +215,7 @@ export default function AdminRulesets() {
 
       {pairs.length ? (
         <div className="card border-accent bg-accent/5">
-          <h2 className="text-sm font-bold text-ink">A state variation is a config diff</h2>
+          <h2 className="text-sm font-semibold text-ink">A state variation is a config diff</h2>
           <p className="mt-1 text-xs text-muted">
             No fork, no branch, no second codebase — the amendment is a file, and the difference
             it makes to what the engine enforces is a diff a reviewer can read.
@@ -279,7 +279,7 @@ export default function AdminRulesets() {
                   return (
                     <tr key={refOf(r)}>
                       <td className="font-semibold">{titleize(r.track)}</td>
-                      <td className="font-mono text-[12px]">{r.version ?? '—'}</td>
+                      <td className="font-mono text-xs">{r.version ?? '—'}</td>
                       <td>
                         {overlay ? (
                           <>
@@ -287,10 +287,10 @@ export default function AdminRulesets() {
                               Overlay
                             </span>
                             {r.overlay_title ? (
-                              <span className="block text-[11px] text-muted">{r.overlay_title}</span>
+                              <span className="block text-xs text-muted">{r.overlay_title}</span>
                             ) : null}
                             {r.base_version ? (
-                              <span className="block font-mono text-[11px] text-muted">
+                              <span className="block font-mono text-xs text-muted">
                                 on {r.track}@{r.base_version}
                               </span>
                             ) : null}
@@ -304,11 +304,11 @@ export default function AdminRulesets() {
                       <td className="text-right tabular-nums">{countText(r.stages)}</td>
                       <td className="text-right tabular-nums">{countText(r.clocks)}</td>
                       <td className="text-right tabular-nums">{countText(r.transitions)}</td>
-                      <td className="font-mono text-[11px] text-muted">{r.file ?? '—'}</td>
+                      <td className="font-mono text-xs text-muted">{r.file ?? '—'}</td>
                       <td className="whitespace-nowrap">
                         <button
                           type="button"
-                          className="btn px-2 py-0.5 text-[11px]"
+                          className="btn px-2 py-0.5 text-xs"
                           onClick={() => setYamlRef(r)}
                         >
                           View YAML
@@ -316,7 +316,7 @@ export default function AdminRulesets() {
                         {mate ? (
                           <button
                             type="button"
-                            className="btn ml-1 px-2 py-0.5 text-[11px]"
+                            className="btn ml-1 px-2 py-0.5 text-xs"
                             onClick={() =>
                               setPair({
                                 base: refOf(mate.base),
@@ -336,7 +336,7 @@ export default function AdminRulesets() {
             </table>
           </div>
         )}
-        <p className="mt-2 text-[11px] text-muted">
+        <p className="mt-2 text-xs text-muted">
           Counts are read from the loaded rule-set, not from the file, so an overlay shows what
           the engine actually enforces after the merge.
         </p>
@@ -347,7 +347,7 @@ export default function AdminRulesets() {
         <section className="card" aria-labelledby="diff-h">
           <div className="flex flex-wrap items-start justify-between gap-2 border-b border-border pb-2">
             <div>
-              <h2 id="diff-h" className="text-base font-bold text-ink">
+              <h2 id="diff-h" className="text-base font-semibold text-ink">
                 Config diff — <span className="font-mono text-sm">{pair.base}</span>{' '}
                 <span aria-hidden="true">→</span>{' '}
                 <span className="font-mono text-sm">{pair.overlay}</span>
@@ -401,7 +401,7 @@ export default function AdminRulesets() {
             Could not load the rule-set file: {errorText(yamlQ.error)}
           </p>
         ) : (
-          <pre className="overflow-auto rounded border border-border bg-surface p-3 text-[12px] leading-5 text-ink">
+          <pre className="overflow-auto rounded border border-border bg-surface p-3 text-xs leading-5 text-ink">
             <code>{yamlQ.data}</code>
           </pre>
         )}

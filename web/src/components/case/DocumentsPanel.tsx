@@ -29,7 +29,7 @@ export default function DocumentsPanel({
   return (
     <section className="card" aria-labelledby="docs-h">
       <div className="flex items-baseline justify-between gap-2">
-        <h2 id="docs-h" className="text-sm font-bold uppercase tracking-wide text-muted">
+        <h2 id="docs-h" className="text-sm font-semibold uppercase tracking-wide text-muted">
           Documents
         </h2>
         <span className="text-xs text-muted">{documents.length}</span>
@@ -61,7 +61,7 @@ export default function DocumentsPanel({
                       <span className="ml-1 font-normal text-muted">v{d.version}</span>
                     ) : null}
                   </p>
-                  <p className="text-[11px] text-muted">{formatTs(d.uploaded_at)}</p>
+                  <p className="text-xs text-muted">{formatTs(d.uploaded_at)}</p>
                 </div>
                 <button
                   type="button"
@@ -73,16 +73,16 @@ export default function DocumentsPanel({
                 </button>
               </div>
               <p
-                className="mt-0.5 truncate font-mono text-[11px] text-muted"
+                className="mt-0.5 truncate font-mono text-xs text-muted"
                 title={d.sha256 ?? ''}
               >
                 sha256 {hashPrefix(d.sha256, 16)}
               </p>
               {d.supersedes_id ? (
-                <p className="text-[11px] text-accent2">supersedes an earlier version</p>
+                <p className="text-xs text-accent2">supersedes an earlier version</p>
               ) : null}
               {d.extraction_status ? (
-                <p className="text-[11px] text-muted">
+                <p className="text-xs text-muted">
                   extraction: <span className="text-ink">{d.extraction_status}</span>
                 </p>
               ) : null}

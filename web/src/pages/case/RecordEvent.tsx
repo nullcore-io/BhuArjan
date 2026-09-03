@@ -266,7 +266,7 @@ export default function RecordEvent() {
       <header className="card mb-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-lg font-bold text-ink">Record event</h1>
+            <h1 className="text-lg font-semibold text-ink">Record event</h1>
             <p className="text-sm text-muted">
               <Link to={`/cases/${id}`} className="text-accent underline-offset-2 hover:underline">
                 {caseQ.data?.case_no || 'Case'}
@@ -295,7 +295,7 @@ export default function RecordEvent() {
                       : 'border-dashed border-border text-muted'
                 }`}
               >
-                <span className="font-bold">{step > n ? '✓' : n}</span>
+                <span className="font-semibold">{step > n ? '✓' : n}</span>
                 {STEP_LABEL[n]}
               </span>
             </li>
@@ -420,7 +420,7 @@ function StepChoose({
 }) {
   return (
     <section className="card">
-      <h2 className="text-sm font-bold uppercase tracking-wide text-muted">
+      <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
         Step 1 · Choose the event to record
       </h2>
       <p className="mt-1 text-xs text-muted">
@@ -482,11 +482,11 @@ function StepChoose({
                         ) : null}
                       </span>
                       {ae.label && ae.label !== ae.type ? (
-                        <span className="block font-mono text-[11px] text-muted">{ae.type}</span>
+                        <span className="block font-mono text-xs text-muted">{ae.type}</span>
                       ) : null}
 
                       {reqs.length ? (
-                        <ul className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px]">
+                        <ul className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs">
                           {reqs.map((r) => (
                             <li
                               key={r.key}
@@ -504,13 +504,13 @@ function StepChoose({
                       ) : null}
 
                       {guardBad ? (
-                        <p className="mt-1 text-[11px] text-[#8C1D18]">
+                        <p className="mt-1 text-xs text-[#8C1D18]">
                           Guard not satisfied
                           {guardReason(ae) ? `: ${guardReason(ae)}` : ''}
                         </p>
                       ) : null}
                       {disabled ? (
-                        <p className="mt-1 text-[11px] font-semibold text-[#8C1D18]">
+                        <p className="mt-1 text-xs font-semibold text-[#8C1D18]">
                           Cannot be recorded yet — record the missing prior event first.
                         </p>
                       ) : null}
@@ -573,7 +573,7 @@ function StepUpload({
 }) {
   return (
     <section className="card">
-      <h2 className="text-sm font-bold uppercase tracking-wide text-muted">
+      <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
         Step 2 · Upload the document
       </h2>
       <p className="mt-1 text-xs text-muted">
@@ -662,10 +662,10 @@ function StepUpload({
                 </div>
               ) : null}
               {extraction?.ocr ? (
-                <p className="text-[11px] text-accent2">Read through OCR — check every field.</p>
+                <p className="text-xs text-accent2">Read through OCR — check every field.</p>
               ) : null}
               {pollsSpent ? (
-                <p className="mt-1 rounded border border-amber bg-amber/10 p-1.5 text-[11px] text-[#8A5300]">
+                <p className="mt-1 rounded border border-amber bg-amber/10 p-1.5 text-xs text-[#8A5300]">
                   The extractor did not finish in a minute. The document is stored; continue and
                   type the fields yourself.
                 </p>
@@ -687,7 +687,7 @@ function StepUpload({
                 disabled={!!doc || !canNoDoc}
               />
             </label>
-            <p className="mt-1 text-[11px] text-muted">
+            <p className="mt-1 text-xs text-muted">
               Permitted only for Collector-level roles; the API rejects a statutory event with
               neither a document nor a reason (<span className="font-mono">document_required</span>).
             </p>
@@ -756,7 +756,7 @@ function StepReview({
 
   return (
     <section className="card">
-      <h2 className="text-sm font-bold uppercase tracking-wide text-muted">
+      <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
         Step 3 · Review what was read
       </h2>
       <p className="mt-1 text-xs text-muted">
@@ -818,7 +818,7 @@ function StepReview({
             />
           </label>
           {typeof fields.publication_date === 'string' && fields.publication_date ? (
-            <p className="mt-0.5 text-[11px] text-muted">
+            <p className="mt-0.5 text-xs text-muted">
               Defaulted to the extracted publication date {formatDate(String(fields.publication_date))}.
             </p>
           ) : null}
@@ -854,7 +854,7 @@ function StepReview({
                         </span>
                       ) : null}
                       {level === 'low' && !touched.has(k) ? (
-                        <span className="text-[11px] text-[#8C1D18]">must be checked</span>
+                        <span className="text-xs text-[#8C1D18]">must be checked</span>
                       ) : null}
                     </div>
 
@@ -871,7 +871,7 @@ function StepReview({
                         <textarea
                           id={inputId}
                           rows={Math.min(10, JSON.stringify(value, null, 2).split('\n').length)}
-                          className={`${INP} font-mono text-[11px]`}
+                          className={`${INP} font-mono text-xs`}
                           defaultValue={JSON.stringify(value, null, 2)}
                           onChange={(e) => {
                             try {
@@ -884,7 +884,7 @@ function StepReview({
                           }}
                         />
                         {jsonErrors[k] ? (
-                          <p className="text-[11px] text-[#8C1D18]">{jsonErrors[k]}</p>
+                          <p className="text-xs text-[#8C1D18]">{jsonErrors[k]}</p>
                         ) : null}
                       </>
                     )}
@@ -892,7 +892,7 @@ function StepReview({
                     {level === 'low' && !touched.has(k) ? (
                       <button
                         type="button"
-                        className="btn mt-1 px-2 py-0.5 text-[11px]"
+                        className="btn mt-1 px-2 py-0.5 text-xs"
                         onClick={() => setField(k, value)}
                       >
                         Value is correct as read
@@ -905,7 +905,7 @@ function StepReview({
           )}
 
           {extraction?.warnings?.length ? (
-            <ul className="mt-3 list-disc pl-4 text-[11px] text-[#8A5300]">
+            <ul className="mt-3 list-disc pl-4 text-xs text-[#8A5300]">
               {extraction.warnings.map((w, i) => (
                 <li key={i}>{String(w)}</li>
               ))}
@@ -967,7 +967,7 @@ function StepConfirm({
 
   return (
     <section className="card">
-      <h2 className="text-sm font-bold uppercase tracking-wide text-muted">
+      <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
         Step 4 · Confirm and commit
       </h2>
       <p className="mt-1 text-xs text-muted">
@@ -995,7 +995,7 @@ function StepConfirm({
             <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">
               Preconditions
             </h3>
-            <button type="button" className="btn px-2 py-0.5 text-[11px]" onClick={onRefresh} disabled={refreshing}>
+            <button type="button" className="btn px-2 py-0.5 text-xs" onClick={onRefresh} disabled={refreshing}>
               {refreshing ? 'Re-checking…' : 'Re-check'}
             </button>
           </div>
@@ -1030,7 +1030,7 @@ function StepConfirm({
 
       {commitError ? (
         <div role="alert" className="mt-3 rounded border border-red bg-red/10 p-3 text-xs text-[#8C1D18]">
-          <p className="text-sm font-bold">
+          <p className="text-sm font-semibold">
             {(problem?.title as string) || 'The event was not recorded'}
           </p>
           <p className="mt-0.5">{errorText(commitError)}</p>
@@ -1045,10 +1045,10 @@ function StepConfirm({
             </ul>
           ) : null}
           {problem?.ruleset_ref ? (
-            <p className="mt-1 font-mono text-[11px]">rule-set: {String(problem.ruleset_ref)}</p>
+            <p className="mt-1 font-mono text-xs">rule-set: {String(problem.ruleset_ref)}</p>
           ) : null}
           {problem?.type ? (
-            <p className="mt-1 text-[11px]">
+            <p className="mt-1 text-xs">
               error type <span className="font-mono">{String(problem.type)}</span>
             </p>
           ) : null}
@@ -1097,7 +1097,7 @@ function StepCommitted({
   const changed = result.clocks_changed ?? []
   return (
     <section className="card border-ok">
-      <h2 className="text-base font-bold text-[#1B5E20]">Event committed to the ledger</h2>
+      <h2 className="text-base font-semibold text-[#1B5E20]">Event committed to the ledger</h2>
       <dl className="mt-3 grid gap-2 text-xs sm:grid-cols-4">
         <Stat label="Sequence" value={String(result.seq)} />
         <Stat label="Event id" value={result.id} mono />
@@ -1105,7 +1105,7 @@ function StepCommitted({
         <Stat label="Stage now" value={titleize(result.stage)} />
       </dl>
 
-      <h3 className="mt-4 text-sm font-bold uppercase tracking-wide text-muted">Clocks changed</h3>
+      <h3 className="mt-4 text-sm font-semibold uppercase tracking-wide text-muted">Clocks changed</h3>
       {changed.length === 0 ? (
         <p className="mt-1 text-xs text-muted">No clock started, closed or moved.</p>
       ) : (
@@ -1125,7 +1125,7 @@ function StepCommitted({
               {changed.map((c, i) => (
                 <tr key={`${c.clock_id}-${i}`}>
                   <td className="font-semibold">{titleize(c.clock_id)}</td>
-                  <td className="font-mono text-[11px]">{c.basis ?? '—'}</td>
+                  <td className="font-mono text-xs">{c.basis ?? '—'}</td>
                   <td>{titleize(c.status)}</td>
                   <td>{formatDate(c.start_date)}</td>
                   <td className="font-semibold">{formatDate(c.due_date)}</td>
@@ -1155,8 +1155,8 @@ function StepCommitted({
 function Stat({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
     <div className="rounded border border-border bg-surface p-2">
-      <dt className="text-[11px] uppercase tracking-wide text-muted">{label}</dt>
-      <dd className={`mt-0.5 break-all font-semibold text-ink ${mono ? 'font-mono text-[11px]' : ''}`}>
+      <dt className="text-xs uppercase tracking-wide text-muted">{label}</dt>
+      <dd className={`mt-0.5 break-all font-semibold text-ink ${mono ? 'font-mono text-xs' : ''}`}>
         {value}
       </dd>
     </div>
