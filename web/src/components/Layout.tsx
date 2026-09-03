@@ -32,6 +32,7 @@ export default function Layout() {
   const nav: { to: string; label: string; badge?: number }[] = [
     { to: '/national', label: 'National' },
     { to: '/projects', label: 'Projects' },
+    { to: '/map', label: 'Land view' },
     { to: '/alerts', label: 'Alerts', badge: alertCount || undefined },
     { to: '/reports', label: 'Reports' },
     ...(roles.includes('STATE_REVENUE') || roles.includes('MINISTRY') || roles.includes('AUDITOR')

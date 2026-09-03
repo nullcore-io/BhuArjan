@@ -20,6 +20,7 @@ const SEGMENT_LABEL: Record<string, string> = {
   integrations: 'Integrations',
   record: 'Record Event',
   public: 'Public Status',
+  map: 'Land View',
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i

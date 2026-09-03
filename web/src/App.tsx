@@ -1,3 +1,4 @@
+import { Suspense, lazy } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import Layout from './components/Layout'
 import { getToken } from './lib/api'
@@ -13,6 +14,9 @@ import PublicStatus from './pages/public/PublicStatus'
 import ReportsPage from './pages/reports/ReportsPage'
 import AdminRulesets from './pages/admin/AdminRulesets'
 import AdminIntegrations from './pages/admin/AdminIntegrations'
+
+// MapLibre is ~900 kB — only loaded when someone opens the land view.
+const MapPage = lazy(() => import('./pages/map/MapPage'))
 
 function RequireAuth({ children }: { children: JSX.Element }) {
   if (!getToken()) return <Navigate to="/login" replace />
@@ -38,6 +42,14 @@ export default function App() {
         <Route path="/cases/:id" element={<CasePage />} />
         <Route path="/cases/:id/record" element={<RecordEvent />} />
         <Route path="/alerts" element={<AlertCentre />} />
+        <Route
+          path="/map"
+          element={
+            <Suspense fallback={<div className="card p-5 text-sm text-muted">Loading land view…</div>}>
+              <MapPage />
+            </Suspense>
+          }
+        />
         <Route path="/districts/:district" element={<DistrictDashboard />} />
         <Route path="/reports" element={<ReportsPage />} />
         <Route path="/admin/rulesets" element={<AdminRulesets />} />

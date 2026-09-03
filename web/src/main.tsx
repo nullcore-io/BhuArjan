@@ -6,6 +6,7 @@ import App from './App'
 import './i18n'
 import { applyStoredPrefs } from './lib/prefs'
 import 'leaflet/dist/leaflet.css'
+import 'maplibre-gl/dist/maplibre-gl.css'
 import './styles/index.css'
 
 // Text size / contrast are attributes on <html>; set them before first paint.

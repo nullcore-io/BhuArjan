@@ -131,6 +131,21 @@ test.describe('screens', () => {
     await shoot(page, '30-case-page', { tiles: true })
   })
 
+  test('land view — the globe', async ({ page }) => {
+    await visit(page, '/login')
+    test.skip(!(await apiUp(page)), 'API unreachable — skipping screens behind auth')
+
+    await page.getByRole('button', { name: /Ministry \(DoLR\)/ }).click()
+    await page.waitForURL(/\/national/, { timeout: 20_000 })
+    await visit(page, '/map')
+
+    // The globe is lazy-loaded and WebGL takes a beat to paint its first frame.
+    await settle(page)
+    await expect(page.getByRole('heading', { name: /Land view/i })).toBeVisible()
+    await page.waitForTimeout(6_000)
+    await shoot(page, '40-land-view')
+  })
+
   test('public status — no sign-in', async ({ page }) => {
     await visit(page, '/public')
     await shoot(page, '20-public-status')
